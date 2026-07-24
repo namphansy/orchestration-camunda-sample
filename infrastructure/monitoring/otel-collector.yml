@@ -11,6 +11,13 @@ processors:
     error_mode: ignore
     traces:
       span:
+        - 'IsMatch(name, "^GET /actuator(/.*)?$")'
+        - 'IsMatch(attributes["url.path"], "^/actuator(/.*)?$")'
+        - 'IsMatch(attributes["http.target"], "^/actuator(/.*)?$")'
+        - 'IsMatch(attributes["http.route"], "^/actuator(/.*)?$")'
+        - 'attributes["url.path"] == "/prometheus"'
+        - 'attributes["http.target"] == "/prometheus"'
+        - 'attributes["http.route"] == "/prometheus"'
         - 'resource.attributes["service.name"] == "workflow-service" and name == "GET /**"'
         - 'resource.attributes["service.name"] == "workflow-service" and name == "ResponseFacade.sendError"'
   batch:

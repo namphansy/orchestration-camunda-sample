@@ -1,0 +1,14 @@
+.git
+.agents
+.jdk
+**/target
+**/.classpath
+**/.project
+**/.settings
+.mvn/wrapper/apache-maven-*
+.mvn/wrapper/*.zip
+temurin17.zip
+tools
+docs
+scripts
+*.md

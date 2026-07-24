@@ -58,13 +58,45 @@ The repository is a Maven multi-module project with one module per service:
 
 ## Startup Instructions
 
+Build Docker images for all runtime services:
+
+```bash
+docker compose build
+```
+
+Start the full Docker stack:
+
+```bash
+docker compose up -d
+```
+
+This starts PostgreSQL, Jaeger, OpenTelemetry Collector, and all runtime services:
+`workflow-service`, `order-service`, `inventory-service`, `payment-service`,
+`shipping-service`, `invoice-service`, and `notification-service`.
+
+Stop the Docker stack:
+
+```bash
+docker compose down
+```
+
+If another local stack is already using the default host ports, override only the host bindings:
+
+```powershell
+$env:POSTGRES_PORT="15433"
+$env:JAEGER_UI_PORT="16687"
+$env:OTEL_GRPC_PORT="14317"
+$env:OTEL_HTTP_PORT="14318"
+docker compose up -d
+```
+
 Build and test all modules:
 
 ```bash
 ./mvnw clean verify
 ```
 
-Start PostgreSQL:
+For Maven-based local development, start only PostgreSQL:
 
 ```bash
 docker compose up -d postgres
@@ -81,7 +113,7 @@ Password: camunda
 Databases: workflow_service, order_service, inventory_service, payment_service, invoice_service
 ```
 
-Start an individual service after building:
+Then start an individual service after building:
 
 ```bash
 ./mvnw -pl order-service spring-boot:run
@@ -124,15 +156,35 @@ Default ports:
 
 ## OpenTelemetry and Tracing
 
-Local distributed tracing is configured for `order-service`, `workflow-service`, `inventory-service`, and `payment-service` with the OpenTelemetry Java Agent, OpenTelemetry Collector, and Jaeger.
+Local distributed tracing is configured for every Dockerized runtime service with the OpenTelemetry Java Agent, OpenTelemetry Collector, and Jaeger.
 
-Start the local observability stack:
+When you start the full Docker stack, Jaeger and the collector start with the services automatically:
 
 ```bash
-docker compose up -d otel-collector jaeger
+docker compose up -d
 ```
 
-On Windows PowerShell, download the Java Agent and run each instrumented service:
+Generate a sample trace:
+
+```bash
+curl -X POST http://localhost:8086/api/notifications \
+  -H "Content-Type: application/json" \
+  -d '{
+    "orderId": "otel-test-1001",
+    "customerId": "customer-otel",
+    "channel": "EMAIL",
+    "message": "OpenTelemetry smoke test",
+    "correlationId": "trace-smoke-1001"
+  }'
+```
+
+Jaeger API service list:
+
+```bash
+curl http://localhost:16686/api/services
+```
+
+For Maven-based local development outside Docker, download the Java Agent and run each instrumented service:
 
 ```powershell
 .\scripts\download-otel-java-agent.ps1
