@@ -1,0 +1,70 @@
+spring:
+  application:
+    name: workflow-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/workflow_service}
+    driver-class-name: org.postgresql.Driver
+    username: ${SPRING_DATASOURCE_USERNAME:camunda}
+    password: ${SPRING_DATASOURCE_PASSWORD:camunda}
+  h2:
+    console:
+      enabled: false
+  flyway:
+    enabled: false
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+  metrics:
+    tags:
+      service: ${spring.application.name}
+
+logging:
+  pattern:
+    level: "%5p [trace_id=%X{trace_id:-},span_id=%X{span_id:-}]"
+
+inventory:
+  service:
+    base-url: http://localhost:8082
+
+payment:
+  service:
+    base-url: http://localhost:8083
+
+invoice:
+  service:
+    base-url: http://localhost:8085
+
+notification:
+  service:
+    base-url: http://localhost:8086
+
+order:
+  service:
+    base-url: http://localhost:8081
+
+camunda:
+  bpm:
+    admin-user:
+      id: demo
+      password: demo
+      first-name: Demo
+      last-name: User
+    filter:
+      create: All tasks
+    history-level: audit
+    database:
+      schema-update: true
+    generic-properties:
+      properties:
+        initializeTelemetry: false

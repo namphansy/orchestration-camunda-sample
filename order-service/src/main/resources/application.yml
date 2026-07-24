@@ -1,0 +1,39 @@
+spring:
+  application:
+    name: order-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/order_service}
+    driver-class-name: org.postgresql.Driver
+    username: ${SPRING_DATASOURCE_USERNAME:camunda}
+    password: ${SPRING_DATASOURCE_PASSWORD:camunda}
+  flyway:
+    enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+server:
+  port: 8081
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+  metrics:
+    tags:
+      service: ${spring.application.name}
+
+logging:
+  pattern:
+    level: "%5p [trace_id=%X{trace_id:-},span_id=%X{span_id:-}]"
+
+workflow:
+  service:
+    base-url: http://localhost:8080

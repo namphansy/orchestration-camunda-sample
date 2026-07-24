@@ -1,0 +1,31 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:workflow-service-test;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: false
+  flyway:
+    enabled: false
+
+inventory:
+  service:
+    base-url: http://localhost:8082
+
+payment:
+  service:
+    base-url: http://localhost:8083
+
+invoice:
+  service:
+    base-url: http://localhost:8085
+
+notification:
+  service:
+    base-url: http://localhost:8086
+
+order:
+  service:
+    base-url: http://localhost:8081

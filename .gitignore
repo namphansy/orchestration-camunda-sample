@@ -1,0 +1,12 @@
+.mvn/wrapper/apache-maven-*/
+.mvn/wrapper/apache-maven-*-bin.zip
+.jdk/
+temurin17.zip
+target/
+tools/
+*.log
+*.iml
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

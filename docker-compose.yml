@@ -1,0 +1,43 @@
+services:
+  jaeger:
+    image: ${JAEGER_IMAGE:-jaegertracing/all-in-one:latest}
+    container_name: camunda-order-jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+      - "4317"
+
+  otel-collector:
+    image: ${OTEL_COLLECTOR_IMAGE:-otel/opentelemetry-collector-contrib:latest}
+    container_name: camunda-order-otel-collector
+    command: ["--config=/etc/otelcol-contrib/config.yml"]
+    volumes:
+      - ./infrastructure/monitoring/otel-collector.yml:/etc/otelcol-contrib/config.yml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    depends_on:
+      jaeger:
+        condition: service_started
+
+  postgres:
+    image: postgres:11-alpine
+    container_name: camunda-order-postgres
+    environment:
+      POSTGRES_DB: workflow_service
+      POSTGRES_USER: camunda
+      POSTGRES_PASSWORD: camunda
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U camunda -d workflow_service"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres11-data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql:ro
+
+volumes:
+  postgres11-data:

@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: notification-service
+  flyway:
+    enabled: false
+
+server:
+  port: 8086
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+  metrics:
+    tags:
+      service: ${spring.application.name}
+
+notification:
+  fail-order-ids: []

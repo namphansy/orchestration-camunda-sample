@@ -1,0 +1,39 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  filter/noisy_http:
+    error_mode: ignore
+    traces:
+      span:
+        - 'resource.attributes["service.name"] == "workflow-service" and name == "GET /**"'
+        - 'resource.attributes["service.name"] == "workflow-service" and name == "ResponseFacade.sendError"'
+  batch:
+
+exporters:
+  debug:
+    verbosity: basic
+  otlp_grpc/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [filter/noisy_http, batch]
+      exporters: [otlp_grpc/jaeger, debug]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]

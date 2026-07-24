@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             xmlns:camunda="http://camunda.org/schema/1.0/dmn"
+             id="Definitions_OrderApproval"
+             name="Order Approval"
+             namespace="http://example.com/workflow/order">
+  <decision id="order-approval" name="Order Approval">
+    <decisionTable id="DecisionTable_OrderApproval" hitPolicy="FIRST">
+      <input id="Input_OrderAmount" label="Order Amount">
+        <inputExpression id="InputExpression_OrderAmount" typeRef="double">
+          <text>orderAmount</text>
+        </inputExpression>
+      </input>
+      <output id="Output_ApprovalLevel" label="Approval Level" name="approvalLevel" typeRef="string" />
+      <rule id="Rule_NoApproval">
+        <inputEntry id="InputEntry_NoApproval">
+          <text>&lt; 5000</text>
+        </inputEntry>
+        <outputEntry id="OutputEntry_NoApproval">
+          <text>"NONE"</text>
+        </outputEntry>
+      </rule>
+      <rule id="Rule_ManagerApproval">
+        <inputEntry id="InputEntry_ManagerApproval">
+          <text>[5000..49999.99]</text>
+        </inputEntry>
+        <outputEntry id="OutputEntry_ManagerApproval">
+          <text>"MANAGER"</text>
+        </outputEntry>
+      </rule>
+      <rule id="Rule_DirectorApproval">
+        <inputEntry id="InputEntry_DirectorApproval">
+          <text>&gt;= 50000</text>
+        </inputEntry>
+        <outputEntry id="OutputEntry_DirectorApproval">
+          <text>"DIRECTOR"</text>
+        </outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>
