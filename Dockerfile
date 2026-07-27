@@ -34,10 +34,11 @@ WORKDIR /app
 
 COPY --from=build "/workspace/${SERVICE}/target/${SERVICE}-0.0.1-SNAPSHOT.jar" app.jar
 COPY --from=build /workspace/opentelemetry-javaagent.jar /otel/opentelemetry-javaagent.jar
+COPY infrastructure/monitoring/otel-javaagent-config.yaml /otel/otel-javaagent-config.yaml
 
 RUN chmod 0644 /otel/opentelemetry-javaagent.jar
 
-ENV JAVA_TOOL_OPTIONS="-javaagent:/otel/opentelemetry-javaagent.jar"
+ENV JAVA_TOOL_OPTIONS="-javaagent:/otel/opentelemetry-javaagent.jar -Dotel.config.file=/otel/otel-javaagent-config.yaml"
 
 USER spring:spring
 

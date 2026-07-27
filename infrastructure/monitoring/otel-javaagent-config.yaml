@@ -1,0 +1,79 @@
+file_format: '1.0'
+
+resource:
+  attributes_list: ${OTEL_RESOURCE_ATTRIBUTES}
+  detection/development:
+    detectors:
+      - service:
+
+propagator:
+  composite:
+    - tracecontext:
+    - baggage:
+
+tracer_provider:
+  sampler:
+    parent_based:
+      root:
+        composite/development:
+          rule_based:
+            rules:
+              - span_kinds:
+                  - server
+                attribute_patterns:
+                  key: url.path
+                  included:
+                    - /actuator*
+                sampler:
+                  always_off:
+              - span_kinds:
+                  - server
+                attribute_patterns:
+                  key: http.target
+                  included:
+                    - /actuator*
+                sampler:
+                  always_off:
+              - span_kinds:
+                  - server
+                attribute_patterns:
+                  key: http.route
+                  included:
+                    - /actuator*
+                sampler:
+                  always_off:
+              - parent:
+                  - none
+                span_kinds:
+                  - client
+                attribute_values:
+                  key: db.name
+                  values:
+                    - workflow_service
+                sampler:
+                  always_off:
+              - parent:
+                  - none
+                span_kinds:
+                  - client
+                attribute_values:
+                  key: db.namespace
+                  values:
+                    - workflow_service
+                sampler:
+                  always_off:
+              - sampler:
+                  always_on:
+      remote_parent_sampled:
+        always_on:
+      remote_parent_not_sampled:
+        always_off:
+      local_parent_sampled:
+        always_on:
+      local_parent_not_sampled:
+        always_off:
+  processors:
+    - batch:
+        exporter:
+          otlp_http:
+            endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4318}/v1/traces
