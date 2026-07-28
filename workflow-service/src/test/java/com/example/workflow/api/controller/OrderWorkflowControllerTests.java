@@ -173,10 +173,7 @@ class OrderWorkflowControllerTests {
                         ProcessVariables.ORDER_STATUS, "CREATED"
                 )
         );
-        Job paymentJob = managementService.createJobQuery()
-                .processInstanceId(processInstance.getProcessInstanceId())
-                .activityId("ChargePayment")
-                .singleResult();
+        Job paymentJob = singlePaymentJob(businessKey);
         managementService.executeJob(paymentJob.getId());
         confirmPaymentThroughRest(businessKey, correlationId, "payment-" + businessKey, "CHARGED")
                 .andExpect(status().isOk())
@@ -285,11 +282,7 @@ class OrderWorkflowControllerTests {
                         ProcessVariables.ORDER_STATUS, "CREATED"
                 )
         );
-        managementService.executeJob(managementService.createJobQuery()
-                .processInstanceId(processInstance.getProcessInstanceId())
-                .activityId("ChargePayment")
-                .singleResult()
-                .getId());
+        managementService.executeJob(singlePaymentJob(businessKey).getId());
 
         confirmPaymentThroughRest(businessKey, "wrong-correlation", "payment-" + businessKey, "CHARGED")
                 .andExpect(status().isOk())
@@ -332,4 +325,18 @@ class OrderWorkflowControllerTests {
                         }
                         """.formatted(correlationId, paymentTransactionId, paymentStatus)));
     }
+
+    private Job singlePaymentJob(String businessKey) {
+        return managementService.createJobQuery()
+                .activityId("ChargePayment")
+                .list()
+                .stream()
+                .filter(job -> businessKey.equals(runtimeService.getVariable(
+                        job.getProcessInstanceId(),
+                        ProcessVariables.BUSINESS_KEY
+                )))
+                .findFirst()
+                .orElse(null);
+    }
+
 }

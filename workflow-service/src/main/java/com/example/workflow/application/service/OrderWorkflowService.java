@@ -121,7 +121,7 @@ public class OrderWorkflowService {
 
         try {
             runtimeService.createMessageCorrelation(PAYMENT_CONFIRMATION_MESSAGE)
-                    .processInstanceBusinessKey(businessKey)
+                    .processInstanceVariableEquals(ProcessVariables.BUSINESS_KEY, businessKey)
                     .processInstanceVariableEquals(ProcessVariables.CORRELATION_ID, request.correlationId())
                     .setVariables(variables)
                     .correlateWithResult();

@@ -36,7 +36,7 @@ public class ChargePaymentDelegate implements JavaDelegate {
     public void execute(DelegateExecution execution) {
         Span span = startDelegateSpan("bpmn.charge_payment", execution);
         try (Scope ignored = span.makeCurrent()) {
-            String businessKey = execution.getBusinessKey();
+            String businessKey = businessKey(execution);
             String correlationId = stringVariable(execution, ProcessVariables.CORRELATION_ID);
             OrderClient.OrderDetailsResponse order = orderClient.getOrder(businessKey);
             span.setAttribute("order.id", businessKey);
@@ -76,7 +76,7 @@ public class ChargePaymentDelegate implements JavaDelegate {
     private Span startDelegateSpan(String spanName, DelegateExecution execution) {
         Span span = tracer.spanBuilder(spanName).startSpan();
         span.setAttribute("camunda.activity.id", execution.getCurrentActivityId());
-        span.setAttribute("camunda.business_key", execution.getBusinessKey());
+        span.setAttribute("camunda.business_key", businessKey(execution));
         span.setAttribute("camunda.process_instance.id", execution.getProcessInstanceId());
         span.setAttribute("correlation.id", String.valueOf(execution.getVariable(ProcessVariables.CORRELATION_ID)));
         return span;
@@ -85,5 +85,13 @@ public class ChargePaymentDelegate implements JavaDelegate {
     private String stringVariable(DelegateExecution execution, String variableName) {
         Object value = execution.getVariable(variableName);
         return value == null ? null : String.valueOf(value);
+    }
+
+    private String businessKey(DelegateExecution execution) {
+        String businessKey = execution.getBusinessKey();
+        if (businessKey != null && !businessKey.isBlank()) {
+            return businessKey;
+        }
+        return stringVariable(execution, ProcessVariables.BUSINESS_KEY);
     }
 }

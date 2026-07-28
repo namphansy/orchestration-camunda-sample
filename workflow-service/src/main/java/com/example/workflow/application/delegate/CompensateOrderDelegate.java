@@ -3,6 +3,8 @@ package com.example.workflow.application.delegate;
 import com.example.workflow.infrastructure.client.InventoryClient;
 import com.example.workflow.infrastructure.client.PaymentClient;
 import com.example.workflow.shared.ProcessVariables;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
 import org.springframework.stereotype.Component;
@@ -34,16 +36,62 @@ public class CompensateOrderDelegate implements JavaDelegate {
             }
         }
 
-        Object reservationId = execution.getVariable(ProcessVariables.INVENTORY_RESERVATION_ID);
-        if (reservationId != null) {
+        Set<String> reservationIds = reservationIds(execution);
+        for (String reservationId : reservationIds) {
             InventoryClient.InventoryReservationResponse release = inventoryClient.releaseInventory(
-                    String.valueOf(reservationId),
-                    "inventory-release:" + businessKey
+                    reservationId,
+                    inventoryReleaseIdempotencyKey(execution, businessKey, reservationId, reservationIds.size())
             );
             if (release != null) {
                 execution.setVariable(ProcessVariables.INVENTORY_RELEASE_STATUS, release.status());
                 execution.setVariable(ProcessVariables.INVENTORY_STATUS, release.status());
             }
         }
+    }
+
+    private Set<String> reservationIds(DelegateExecution execution) {
+        Set<String> reservationIds = new LinkedHashSet<>();
+        Object reservationId = execution.getVariable(ProcessVariables.INVENTORY_RESERVATION_ID);
+        if (reservationId != null) {
+            reservationIds.add(String.valueOf(reservationId));
+        }
+
+        Object reservationIdList = execution.getVariable(ProcessVariables.INVENTORY_RESERVATION_IDS);
+        if (reservationIdList instanceof Iterable<?> values) {
+            for (Object value : values) {
+                if (value != null) {
+                    reservationIds.add(String.valueOf(value));
+                }
+            }
+        }
+        return reservationIds;
+    }
+
+    private String inventoryReleaseIdempotencyKey(
+            DelegateExecution execution,
+            String businessKey,
+            String reservationId,
+            int reservationCount
+    ) {
+        if (reservationCount == 1 && !hasMultipleOrderLines(execution)) {
+            return "inventory-release:" + businessKey;
+        }
+        return "inventory-release:" + businessKey + ":" + reservationId;
+    }
+
+    private boolean hasMultipleOrderLines(DelegateExecution execution) {
+        Object orderLines = execution.getVariable(ProcessVariables.ORDER_LINES);
+        return orderLines instanceof Iterable<?> values && values.iterator().hasNext() && hasMoreThanOne(values);
+    }
+
+    private boolean hasMoreThanOne(Iterable<?> values) {
+        int count = 0;
+        for (Object ignored : values) {
+            count++;
+            if (count > 1) {
+                return true;
+            }
+        }
+        return false;
     }
 }

@@ -3,6 +3,7 @@ package com.example.workflow.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -19,6 +20,7 @@ import com.example.workflow.infrastructure.client.PaymentDeclinedException;
 import com.example.workflow.infrastructure.client.ShippingClient;
 import com.example.workflow.infrastructure.client.ShippingFailedException;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
 import org.camunda.bpm.engine.HistoryService;
 import org.camunda.bpm.engine.ManagementService;
@@ -283,6 +285,117 @@ class OrderWorkflowProcessTests {
     }
 
     @Test
+    void multiItemOrdersReserveEachProductLine() {
+        String businessKey = "order-process-test-multi-item";
+        String correlationId = "correlation-process-test-multi-item";
+        when(orderClient.getOrder(businessKey))
+                .thenReturn(new OrderClient.OrderDetailsResponse(
+                        businessKey,
+                        "customer-1",
+                        new BigDecimal("120.50"),
+                        "USD",
+                        "SKU-IGNORED",
+                        1,
+                        "PROCESSING",
+                        correlationId,
+                        List.of(
+                                new OrderClient.OrderLine("SKU-A", 2),
+                                new OrderClient.OrderLine("SKU-B", 3)
+                        )
+                ));
+        when(inventoryClient.reserveInventory(any(), any()))
+                .thenAnswer(invocation -> {
+                    InventoryClient.InventoryReservationRequest request = invocation.getArgument(0);
+                    return new InventoryClient.InventoryReservationResponse(
+                            "reservation-" + businessKey + "-" + request.sku().toLowerCase(),
+                            businessKey,
+                            request.sku(),
+                            request.quantity(),
+                            "RESERVED",
+                            correlationId
+                    );
+                });
+
+        ProcessInstance processInstance = startOrderProcess(businessKey, correlationId);
+
+        assertThat(singlePaymentJob(processInstance)).isNotNull();
+        verify(inventoryClient).reserveInventory(
+                argThat(request -> businessKey.equals(request.orderId())
+                        && "SKU-A".equals(request.sku())
+                        && Integer.valueOf(2).equals(request.quantity())
+                        && correlationId.equals(request.correlationId())),
+                eq("inventory-reservation:" + businessKey + ":SKU-A")
+        );
+        verify(inventoryClient).reserveInventory(
+                argThat(request -> businessKey.equals(request.orderId())
+                        && "SKU-B".equals(request.sku())
+                        && Integer.valueOf(3).equals(request.quantity())
+                        && correlationId.equals(request.correlationId())),
+                eq("inventory-reservation:" + businessKey + ":SKU-B")
+        );
+    }
+
+    @Test
+    void failedMultiItemReservationReleasesPreviouslyReservedLinesAndRejectsOrder() {
+        String businessKey = "order-process-test-multi-item-insufficient-stock";
+        String correlationId = "correlation-process-test-multi-item-insufficient-stock";
+        when(orderClient.getOrder(businessKey))
+                .thenReturn(new OrderClient.OrderDetailsResponse(
+                        businessKey,
+                        "customer-1",
+                        new BigDecimal("120.50"),
+                        "USD",
+                        "SKU-IGNORED",
+                        1,
+                        "PROCESSING",
+                        correlationId,
+                        List.of(
+                                new OrderClient.OrderLine("SKU-A", 2),
+                                new OrderClient.OrderLine("SKU-B", 3)
+                        )
+                ));
+        when(inventoryClient.reserveInventory(any(), any()))
+                .thenAnswer(invocation -> {
+                    InventoryClient.InventoryReservationRequest request = invocation.getArgument(0);
+                    if ("SKU-B".equals(request.sku())) {
+                        throw new InsufficientStockException("Inventory service reported insufficient stock for SKU-B");
+                    }
+                    return new InventoryClient.InventoryReservationResponse(
+                            "reservation-" + businessKey + "-a",
+                            businessKey,
+                            request.sku(),
+                            request.quantity(),
+                            "RESERVED",
+                            correlationId
+                    );
+                });
+        when(inventoryClient.releaseInventory(
+                "reservation-" + businessKey + "-a",
+                "inventory-release:" + businessKey + ":reservation-" + businessKey + "-a"
+        )).thenReturn(new InventoryClient.InventoryReservationResponse(
+                "reservation-" + businessKey + "-a",
+                businessKey,
+                "SKU-A",
+                2,
+                "RELEASED",
+                correlationId
+        ));
+
+        ProcessInstance processInstance = startOrderProcess(businessKey, correlationId);
+
+        assertThat(runtimeService.createProcessInstanceQuery()
+                .processInstanceId(processInstance.getProcessInstanceId())
+                .singleResult()).isNull();
+        assertHistoricVariable(processInstance, ProcessVariables.ORDER_STATUS, "REJECTED");
+        assertHistoricVariable(processInstance, ProcessVariables.INVENTORY_STATUS, "RELEASED");
+        assertHistoricVariable(processInstance, ProcessVariables.INVENTORY_RELEASE_STATUS, "RELEASED");
+        verify(inventoryClient).releaseInventory(
+                "reservation-" + businessKey + "-a",
+                "inventory-release:" + businessKey + ":reservation-" + businessKey + "-a"
+        );
+    }
+
+    @Test
     void rejectsOrderWhenPaymentIsDeclined() {
         String businessKey = "order-process-test-payment-declined";
         stubInventoryReserved(businessKey, "correlation-process-test-payment-declined");
@@ -380,9 +493,15 @@ class OrderWorkflowProcessTests {
         assertPaymentJobFails(paymentJob);
 
         Incident incident = runtimeService.createIncidentQuery()
-                .processInstanceId(processInstance.getProcessInstanceId())
                 .activityId("ChargePayment")
-                .singleResult();
+                .list()
+                .stream()
+                .filter(candidate -> businessKey.equals(runtimeService.getVariable(
+                        candidate.getProcessInstanceId(),
+                        ProcessVariables.BUSINESS_KEY
+                )))
+                .findFirst()
+                .orElse(null);
 
         assertThat(incident).isNotNull();
         assertThat(singlePaymentJob(processInstance).getRetries()).isZero();
@@ -604,7 +723,7 @@ class OrderWorkflowProcessTests {
             String paymentStatus
     ) {
         runtimeService.createMessageCorrelation(OrderWorkflowService.PAYMENT_CONFIRMATION_MESSAGE)
-                .processInstanceBusinessKey(businessKey)
+                .processInstanceVariableEquals(ProcessVariables.BUSINESS_KEY, businessKey)
                 .processInstanceVariableEquals(ProcessVariables.CORRELATION_ID, correlationId)
                 .setVariable(ProcessVariables.PAYMENT_TRANSACTION_ID, paymentTransactionId)
                 .setVariable(ProcessVariables.PAYMENT_STATUS, paymentStatus)
@@ -614,9 +733,15 @@ class OrderWorkflowProcessTests {
 
     private void assertWaitingForPaymentConfirmation(ProcessInstance processInstance) {
         assertThat(runtimeService.createExecutionQuery()
-                .processInstanceId(processInstance.getProcessInstanceId())
                 .activityId("WaitForPaymentConfirmation")
-                .singleResult()).isNotNull();
+                .list()
+                .stream()
+                .filter(execution -> processInstance.getBusinessKey().equals(runtimeService.getVariable(
+                        execution.getProcessInstanceId(),
+                        ProcessVariables.BUSINESS_KEY
+                )))
+                .findFirst()
+                .orElse(null)).isNotNull();
     }
 
     private void assertPaymentJobFails(Job paymentJob) {
@@ -626,16 +751,28 @@ class OrderWorkflowProcessTests {
 
     private Job singlePaymentJob(ProcessInstance processInstance) {
         return managementService.createJobQuery()
-                .processInstanceId(processInstance.getProcessInstanceId())
                 .activityId("ChargePayment")
-                .singleResult();
+                .list()
+                .stream()
+                .filter(job -> processInstance.getBusinessKey().equals(runtimeService.getVariable(
+                        job.getProcessInstanceId(),
+                        ProcessVariables.BUSINESS_KEY
+                )))
+                .findFirst()
+                .orElse(null);
     }
 
     private Job singlePaymentConfirmationTimerJob(ProcessInstance processInstance) {
         return managementService.createJobQuery()
-                .processInstanceId(processInstance.getProcessInstanceId())
                 .activityId("PaymentConfirmationTimeoutBoundary")
-                .singleResult();
+                .list()
+                .stream()
+                .filter(job -> processInstance.getBusinessKey().equals(runtimeService.getVariable(
+                        job.getProcessInstanceId(),
+                        ProcessVariables.BUSINESS_KEY
+                )))
+                .findFirst()
+                .orElse(null);
     }
 
     private Task singleApprovalTask(ProcessInstance processInstance, String taskDefinitionKey) {
