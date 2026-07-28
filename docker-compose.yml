@@ -96,6 +96,44 @@ services:
       retries: 12
       start_period: 40s
 
+  external-task-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: external-task-worker
+    image: camunda-order/external-task-worker:local
+    container_name: orchestration-camunda-sample-external-task-worker
+    environment:
+      <<: *otel-env
+      OTEL_SERVICE_NAME: external-task-worker
+      WORKER_CAMUNDA_BASE_URL: http://workflow-service:8080/engine-rest
+      INVENTORY_SERVICE_BASE_URL: http://inventory-service:8082
+      PAYMENT_SERVICE_BASE_URL: http://payment-service:8083
+      SHIPPING_SERVICE_BASE_URL: http://shipping-service:8084
+      ORDER_SERVICE_BASE_URL: http://order-service:8081
+    ports:
+      - "${EXTERNAL_TASK_WORKER_PORT:-8087}:8087"
+    depends_on:
+      workflow-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      inventory-service:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+      shipping-service:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8087/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
   order-service:
     build:
       context: .

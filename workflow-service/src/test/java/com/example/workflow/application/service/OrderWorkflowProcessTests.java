@@ -27,6 +27,9 @@ import org.camunda.bpm.engine.ManagementService;
 import org.camunda.bpm.engine.MismatchingMessageCorrelationException;
 import org.camunda.bpm.engine.RepositoryService;
 import org.camunda.bpm.engine.RuntimeService;
+import org.camunda.bpm.engine.ExternalTaskService;
+import org.camunda.bpm.engine.externaltask.ExternalTask;
+import org.camunda.bpm.engine.externaltask.LockedExternalTask;
 import org.camunda.bpm.engine.history.HistoricProcessInstance;
 import org.camunda.bpm.engine.history.HistoricVariableInstance;
 import org.camunda.bpm.engine.runtime.Incident;
@@ -46,6 +49,7 @@ class OrderWorkflowProcessTests {
     private final RuntimeService runtimeService;
     private final HistoryService historyService;
     private final ManagementService managementService;
+    private final ExternalTaskService externalTaskService;
     private final TaskService taskService;
 
     @MockBean
@@ -72,12 +76,14 @@ class OrderWorkflowProcessTests {
             RuntimeService runtimeService,
             HistoryService historyService,
             ManagementService managementService,
+            ExternalTaskService externalTaskService,
             TaskService taskService
     ) {
         this.repositoryService = repositoryService;
         this.runtimeService = runtimeService;
         this.historyService = historyService;
         this.managementService = managementService;
+        this.externalTaskService = externalTaskService;
         this.taskService = taskService;
     }
 
@@ -88,6 +94,66 @@ class OrderWorkflowProcessTests {
                 .count();
 
         assertThat(deployedDefinitions).isPositive();
+    }
+
+    @Test
+    void deploysExternalTaskProcessBranch() {
+        assertThat(repositoryService.createProcessDefinitionQuery()
+                .processDefinitionKey("order-processing-external")
+                .count()).isPositive();
+        assertThat(repositoryService.createProcessDefinitionQuery()
+                .processDefinitionKey("payment-subprocess-external")
+                .count()).isPositive();
+        assertThat(repositoryService.createProcessDefinitionQuery()
+                .processDefinitionKey("shipping-subprocess-external")
+                .count()).isPositive();
+    }
+
+    @Test
+    void externalTaskBranchCreatesLockableInventoryTasks() {
+        String businessKey = "order-process-test-external-inventory";
+        String correlationId = "correlation-process-test-external-inventory";
+        stubOrder(businessKey, new BigDecimal("120.50"), 1, correlationId);
+
+        startExternalOrderProcess(businessKey, correlationId);
+
+        LockedExternalTask lockedTask = fetchSingleExternalTask("reserve-inventory", "inventory-worker");
+
+        assertThat(lockedTask).isNotNull();
+        assertThat(lockedTask.getTopicName()).isEqualTo("reserve-inventory");
+        assertThat(lockedTask.getBusinessKey()).isEqualTo(businessKey);
+        assertThat(lockedTask.getVariables().get(ProcessVariables.CORRELATION_ID)).isEqualTo(correlationId);
+    }
+
+    @Test
+    void externalTaskFailurePreservesWorkflowStateAndStoresCockpitDetails() {
+        String businessKey = "order-process-test-external-retry";
+        String correlationId = "correlation-process-test-external-retry";
+        stubOrder(businessKey, new BigDecimal("120.50"), 1, correlationId);
+        ProcessInstance processInstance = startExternalOrderProcess(businessKey, correlationId);
+        LockedExternalTask lockedTask = fetchSingleExternalTask("reserve-inventory", "inventory-worker");
+
+        externalTaskService.handleFailure(
+                lockedTask.getId(),
+                "inventory-worker",
+                "inventory-service unavailable",
+                "java.net.ConnectException: inventory-service unavailable",
+                2,
+                1_000L
+        );
+
+        ExternalTask failedTask = externalTaskService.createExternalTaskQuery()
+                .processInstanceId(processInstance.getProcessInstanceId())
+                .topicName("reserve-inventory")
+                .singleResult();
+
+        assertThat(runtimeService.createProcessInstanceQuery()
+                .processInstanceId(processInstance.getProcessInstanceId())
+                .singleResult()).isNotNull();
+        assertThat(failedTask.getRetries()).isEqualTo(2);
+        assertThat(failedTask.getErrorMessage()).isEqualTo("inventory-service unavailable");
+        assertThat(externalTaskService.getExternalTaskErrorDetails(failedTask.getId()))
+                .contains("inventory-service unavailable");
     }
 
     @Test
@@ -635,6 +701,28 @@ class OrderWorkflowProcessTests {
                         ProcessVariables.ORDER_STATUS, "CREATED"
                 )
         );
+    }
+
+    private ProcessInstance startExternalOrderProcess(String businessKey, String correlationId) {
+        return runtimeService.startProcessInstanceByKey(
+                "order-processing-external",
+                businessKey,
+                Map.of(
+                        ProcessVariables.ORDER_ID, businessKey,
+                        ProcessVariables.BUSINESS_KEY, businessKey,
+                        ProcessVariables.CORRELATION_ID, correlationId,
+                        ProcessVariables.ORDER_STATUS, "CREATED"
+                )
+        );
+    }
+
+    private LockedExternalTask fetchSingleExternalTask(String topicName, String workerId) {
+        return externalTaskService.fetchAndLock(1, workerId)
+                .topic(topicName, 60_000L)
+                .execute()
+                .stream()
+                .findFirst()
+                .orElse(null);
     }
 
     private void stubInventoryReserved(String businessKey, String correlationId) {

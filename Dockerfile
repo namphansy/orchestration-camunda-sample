@@ -10,6 +10,7 @@ ADD "https://github.com/open-telemetry/opentelemetry-java-instrumentation/releas
 
 COPY pom.xml .
 COPY workflow-service/pom.xml workflow-service/pom.xml
+COPY external-task-worker/pom.xml external-task-worker/pom.xml
 COPY order-service/pom.xml order-service/pom.xml
 COPY inventory-service/pom.xml inventory-service/pom.xml
 COPY payment-service/pom.xml payment-service/pom.xml
@@ -21,7 +22,7 @@ COPY integration-tests/pom.xml integration-tests/pom.xml
 COPY . .
 
 RUN --mount=type=cache,target=/root/.m2 mvn -B \
-    -pl workflow-service,order-service,inventory-service,payment-service,shipping-service,invoice-service,notification-service \
+    -pl workflow-service,external-task-worker,order-service,inventory-service,payment-service,shipping-service,invoice-service,notification-service \
     -am package spring-boot:repackage -DskipTests -Dmaven.test.skip=true
 
 FROM eclipse-temurin:17-jre-alpine

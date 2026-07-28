@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_PaymentSubprocessExternal"
+                  targetNamespace="http://example.com/workflow/payment/external">
+  <bpmn:error id="Error_PaymentDeclined" name="Payment Declined" errorCode="PAYMENT_DECLINED" />
+  <bpmn:message id="Message_PaymentConfirmationReceivedExternal" name="PaymentConfirmationReceived" />
+
+  <bpmn:process id="payment-subprocess-external" name="Payment Subprocess External Tasks" isExecutable="true">
+    <bpmn:startEvent id="StartPaymentExternal" name="Start Payment">
+      <bpmn:outgoing>Flow_Start_ChargeExternal</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="ChargePaymentExternal" name="Charge Payment" camunda:type="external" camunda:topic="charge-payment">
+      <bpmn:incoming>Flow_Start_ChargeExternal</bpmn:incoming>
+      <bpmn:outgoing>Flow_Charge_WaitPaymentConfirmationExternal</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:receiveTask id="WaitForPaymentConfirmationExternal" name="Wait for Payment Confirmation" messageRef="Message_PaymentConfirmationReceivedExternal">
+      <bpmn:incoming>Flow_Charge_WaitPaymentConfirmationExternal</bpmn:incoming>
+      <bpmn:outgoing>Flow_PaymentConfirmation_EndExternal</bpmn:outgoing>
+    </bpmn:receiveTask>
+    <bpmn:boundaryEvent id="PaymentConfirmationTimeoutBoundaryExternal" name="Payment Confirmation Timeout" attachedToRef="WaitForPaymentConfirmationExternal">
+      <bpmn:outgoing>Flow_PaymentConfirmationTimeout_MarkTimeoutExternal</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT5M</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="MarkPaymentTimedOutExternal" name="Mark Payment Timed Out" camunda:delegateExpression="${markPaymentTimedOutDelegate}">
+      <bpmn:incoming>Flow_PaymentConfirmationTimeout_MarkTimeoutExternal</bpmn:incoming>
+      <bpmn:outgoing>Flow_MarkPaymentTimedOut_EndExternal</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="PaymentCompletedExternal" name="Payment Completed">
+      <bpmn:incoming>Flow_PaymentConfirmation_EndExternal</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="PaymentTimedOutExternal" name="Payment Timed Out">
+      <bpmn:incoming>Flow_MarkPaymentTimedOut_EndExternal</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="Flow_Start_ChargeExternal" sourceRef="StartPaymentExternal" targetRef="ChargePaymentExternal" />
+    <bpmn:sequenceFlow id="Flow_Charge_WaitPaymentConfirmationExternal" sourceRef="ChargePaymentExternal" targetRef="WaitForPaymentConfirmationExternal" />
+    <bpmn:sequenceFlow id="Flow_PaymentConfirmation_EndExternal" sourceRef="WaitForPaymentConfirmationExternal" targetRef="PaymentCompletedExternal" />
+    <bpmn:sequenceFlow id="Flow_PaymentConfirmationTimeout_MarkTimeoutExternal" sourceRef="PaymentConfirmationTimeoutBoundaryExternal" targetRef="MarkPaymentTimedOutExternal" />
+    <bpmn:sequenceFlow id="Flow_MarkPaymentTimedOut_EndExternal" sourceRef="MarkPaymentTimedOutExternal" targetRef="PaymentTimedOutExternal" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_PaymentSubprocessExternal">
+    <bpmndi:BPMNPlane id="BPMNPlane_PaymentSubprocessExternal" bpmnElement="payment-subprocess-external">
+      <bpmndi:BPMNShape id="StartPaymentExternal_di" bpmnElement="StartPaymentExternal">
+        <dc:Bounds x="160" y="160" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ChargePaymentExternal_di" bpmnElement="ChargePaymentExternal">
+        <dc:Bounds x="250" y="138" width="130" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="WaitForPaymentConfirmationExternal_di" bpmnElement="WaitForPaymentConfirmationExternal">
+        <dc:Bounds x="440" y="138" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="PaymentConfirmationTimeoutBoundaryExternal_di" bpmnElement="PaymentConfirmationTimeoutBoundaryExternal">
+        <dc:Bounds x="507" y="200" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="MarkPaymentTimedOutExternal_di" bpmnElement="MarkPaymentTimedOutExternal">
+        <dc:Bounds x="455" y="310" width="140" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="PaymentCompletedExternal_di" bpmnElement="PaymentCompletedExternal">
+        <dc:Bounds x="675" y="160" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="PaymentTimedOutExternal_di" bpmnElement="PaymentTimedOutExternal">
+        <dc:Bounds x="675" y="332" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Start_ChargeExternal_di" bpmnElement="Flow_Start_ChargeExternal">
+        <di:waypoint x="196" y="178" />
+        <di:waypoint x="250" y="178" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Charge_WaitPaymentConfirmationExternal_di" bpmnElement="Flow_Charge_WaitPaymentConfirmationExternal">
+        <di:waypoint x="380" y="178" />
+        <di:waypoint x="440" y="178" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_PaymentConfirmation_EndExternal_di" bpmnElement="Flow_PaymentConfirmation_EndExternal">
+        <di:waypoint x="610" y="178" />
+        <di:waypoint x="675" y="178" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_PaymentConfirmationTimeout_MarkTimeoutExternal_di" bpmnElement="Flow_PaymentConfirmationTimeout_MarkTimeoutExternal">
+        <di:waypoint x="525" y="236" />
+        <di:waypoint x="525" y="310" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_MarkPaymentTimedOut_EndExternal_di" bpmnElement="Flow_MarkPaymentTimedOut_EndExternal">
+        <di:waypoint x="595" y="350" />
+        <di:waypoint x="675" y="350" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
