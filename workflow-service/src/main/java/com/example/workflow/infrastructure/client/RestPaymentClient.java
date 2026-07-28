@@ -55,4 +55,24 @@ public class RestPaymentClient implements PaymentClient {
         }
         return chargeResponse;
     }
+
+    @Override
+    public PaymentChargeResponse refundPayment(String transactionId, String idempotencyKey) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Idempotency-Key", idempotencyKey);
+        LOGGER.info("Calling payment-service refund. transactionId={}, idempotencyKey={}",
+                transactionId, idempotencyKey);
+        ResponseEntity<PaymentChargeResponse> response = restTemplate.exchange(
+                paymentBaseUrl + "/api/payments/transactions/" + transactionId + "/refund",
+                HttpMethod.POST,
+                new HttpEntity<>(headers),
+                PaymentChargeResponse.class
+        );
+        PaymentChargeResponse body = response.getBody();
+        if (body != null) {
+            LOGGER.info("payment-service refund completed. transactionId={}, orderId={}, status={}",
+                    transactionId, body.orderId(), body.status());
+        }
+        return body;
+    }
 }

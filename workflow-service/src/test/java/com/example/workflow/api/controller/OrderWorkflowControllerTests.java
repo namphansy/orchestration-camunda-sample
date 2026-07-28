@@ -13,6 +13,7 @@ import com.example.workflow.infrastructure.client.InvoiceClient;
 import com.example.workflow.infrastructure.client.NotificationClient;
 import com.example.workflow.infrastructure.client.OrderClient;
 import com.example.workflow.infrastructure.client.PaymentClient;
+import com.example.workflow.infrastructure.client.ShippingClient;
 import com.example.workflow.shared.ProcessVariables;
 import java.math.BigDecimal;
 import java.util.Map;
@@ -54,6 +55,9 @@ class OrderWorkflowControllerTests {
 
     @MockBean
     private PaymentClient paymentClient;
+
+    @MockBean
+    private ShippingClient shippingClient;
 
     @MockBean
     private InvoiceClient invoiceClient;
@@ -129,6 +133,16 @@ class OrderWorkflowControllerTests {
                         new BigDecimal("6000.00"),
                         "USD",
                         "CHARGED",
+                        correlationId,
+                        null
+                ));
+        when(shippingClient.createShipment(any(), eq("shipment-creation:" + businessKey)))
+                .thenReturn(new ShippingClient.ShipmentResponse(
+                        "shipment-" + businessKey,
+                        businessKey,
+                        "SKU-DEFAULT",
+                        1,
+                        "CREATED",
                         correlationId,
                         null
                 ));
@@ -231,6 +245,16 @@ class OrderWorkflowControllerTests {
                         new BigDecimal("120.50"),
                         "USD",
                         "CHARGED",
+                        correlationId,
+                        null
+                ));
+        when(shippingClient.createShipment(any(), eq("shipment-creation:" + businessKey)))
+                .thenReturn(new ShippingClient.ShipmentResponse(
+                        "shipment-" + businessKey,
+                        businessKey,
+                        "SKU-DEFAULT",
+                        1,
+                        "CREATED",
                         correlationId,
                         null
                 ));

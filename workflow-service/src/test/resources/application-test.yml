@@ -18,6 +18,10 @@ payment:
   service:
     base-url: http://localhost:8083
 
+shipping:
+  service:
+    base-url: http://localhost:8084
+
 invoice:
   service:
     base-url: http://localhost:8085

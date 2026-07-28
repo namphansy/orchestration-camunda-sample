@@ -42,6 +42,12 @@ public class PaymentTransaction {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    @Column(name = "refund_idempotency_key", length = 128)
+    private String refundIdempotencyKey;
+
+    @Column(name = "refunded_at")
+    private Instant refundedAt;
+
     protected PaymentTransaction() {
     }
 
@@ -85,5 +91,14 @@ public class PaymentTransaction {
 
     public String getFailureReason() {
         return failureReason;
+    }
+
+    public void refund(String refundIdempotencyKey) {
+        if (status == PaymentStatus.REFUNDED) {
+            return;
+        }
+        status = PaymentStatus.REFUNDED;
+        this.refundIdempotencyKey = refundIdempotencyKey;
+        refundedAt = Instant.now();
     }
 }

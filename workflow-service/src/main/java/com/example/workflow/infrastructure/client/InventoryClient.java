@@ -4,6 +4,8 @@ public interface InventoryClient {
 
     InventoryReservationResponse reserveInventory(InventoryReservationRequest request, String idempotencyKey);
 
+    InventoryReservationResponse releaseInventory(String reservationId, String idempotencyKey);
+
     record InventoryReservationRequest(
             String orderId,
             String sku,

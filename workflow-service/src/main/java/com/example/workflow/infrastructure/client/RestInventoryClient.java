@@ -61,4 +61,24 @@ public class RestInventoryClient implements InventoryClient {
             throw exception;
         }
     }
+
+    @Override
+    public InventoryReservationResponse releaseInventory(String reservationId, String idempotencyKey) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Idempotency-Key", idempotencyKey);
+        LOGGER.info("Calling inventory-service release. reservationId={}, idempotencyKey={}",
+                reservationId, idempotencyKey);
+        ResponseEntity<InventoryReservationResponse> response = restTemplate.exchange(
+                inventoryBaseUrl + "/api/inventory/reservations/" + reservationId + "/release",
+                HttpMethod.POST,
+                new HttpEntity<>(headers),
+                InventoryReservationResponse.class
+        );
+        InventoryReservationResponse body = response.getBody();
+        if (body != null) {
+            LOGGER.info("inventory-service release completed. reservationId={}, orderId={}, status={}",
+                    reservationId, body.orderId(), body.status());
+        }
+        return body;
+    }
 }
