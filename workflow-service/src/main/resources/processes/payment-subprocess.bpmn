@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_PaymentSubprocess"
+                  targetNamespace="http://example.com/workflow/payment"
+                  exporter="Camunda Modeler"
+                  exporterVersion="5.49.0">
+  <bpmn:error id="Error_PaymentDeclined" name="Payment Declined" errorCode="PAYMENT_DECLINED" />
+  <bpmn:message id="Message_PaymentConfirmationReceived" name="PaymentConfirmationReceived" />
+
+  <bpmn:process id="payment-subprocess" name="Payment Subprocess" isExecutable="true">
+    <bpmn:startEvent id="StartPayment" name="Start Payment">
+      <bpmn:outgoing>Flow_Start_Charge</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="ChargePayment" name="Charge Payment" camunda:asyncBefore="true" camunda:delegateExpression="${chargePaymentDelegate}">
+      <bpmn:extensionElements>
+        <camunda:failedJobRetryTimeCycle>R3/PT1S</camunda:failedJobRetryTimeCycle>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Start_Charge</bpmn:incoming>
+      <bpmn:outgoing>Flow_Charge_WaitPaymentConfirmation</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:receiveTask id="WaitForPaymentConfirmation" name="Wait for Payment Confirmation" messageRef="Message_PaymentConfirmationReceived">
+      <bpmn:incoming>Flow_Charge_WaitPaymentConfirmation</bpmn:incoming>
+      <bpmn:outgoing>Flow_PaymentConfirmation_End</bpmn:outgoing>
+    </bpmn:receiveTask>
+    <bpmn:boundaryEvent id="PaymentConfirmationTimeoutBoundary" name="Payment Confirmation Timeout" attachedToRef="WaitForPaymentConfirmation">
+      <bpmn:outgoing>Flow_PaymentConfirmationTimeout_MarkTimeout</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT5M</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="MarkPaymentTimedOut" name="Mark Payment Timed Out" camunda:delegateExpression="${markPaymentTimedOutDelegate}">
+      <bpmn:incoming>Flow_PaymentConfirmationTimeout_MarkTimeout</bpmn:incoming>
+      <bpmn:outgoing>Flow_MarkPaymentTimedOut_End</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="PaymentCompleted" name="Payment Completed">
+      <bpmn:incoming>Flow_PaymentConfirmation_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="PaymentTimedOut" name="Payment Timed Out">
+      <bpmn:incoming>Flow_MarkPaymentTimedOut_End</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="Flow_Start_Charge" sourceRef="StartPayment" targetRef="ChargePayment" />
+    <bpmn:sequenceFlow id="Flow_Charge_WaitPaymentConfirmation" sourceRef="ChargePayment" targetRef="WaitForPaymentConfirmation" />
+    <bpmn:sequenceFlow id="Flow_PaymentConfirmation_End" sourceRef="WaitForPaymentConfirmation" targetRef="PaymentCompleted" />
+    <bpmn:sequenceFlow id="Flow_PaymentConfirmationTimeout_MarkTimeout" sourceRef="PaymentConfirmationTimeoutBoundary" targetRef="MarkPaymentTimedOut" />
+    <bpmn:sequenceFlow id="Flow_MarkPaymentTimedOut_End" sourceRef="MarkPaymentTimedOut" targetRef="PaymentTimedOut" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_PaymentSubprocess">
+    <bpmndi:BPMNPlane id="BPMNPlane_PaymentSubprocess" bpmnElement="payment-subprocess">
+      <bpmndi:BPMNShape id="StartPayment_di" bpmnElement="StartPayment">
+        <dc:Bounds x="160" y="160" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ChargePayment_di" bpmnElement="ChargePayment">
+        <dc:Bounds x="250" y="138" width="130" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="WaitForPaymentConfirmation_di" bpmnElement="WaitForPaymentConfirmation">
+        <dc:Bounds x="440" y="138" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="PaymentConfirmationTimeoutBoundary_di" bpmnElement="PaymentConfirmationTimeoutBoundary">
+        <dc:Bounds x="507" y="200" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="MarkPaymentTimedOut_di" bpmnElement="MarkPaymentTimedOut">
+        <dc:Bounds x="455" y="310" width="140" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="PaymentCompleted_di" bpmnElement="PaymentCompleted">
+        <dc:Bounds x="675" y="160" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="PaymentTimedOut_di" bpmnElement="PaymentTimedOut">
+        <dc:Bounds x="675" y="332" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Start_Charge_di" bpmnElement="Flow_Start_Charge">
+        <di:waypoint x="196" y="178" />
+        <di:waypoint x="250" y="178" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Charge_WaitPaymentConfirmation_di" bpmnElement="Flow_Charge_WaitPaymentConfirmation">
+        <di:waypoint x="380" y="178" />
+        <di:waypoint x="440" y="178" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_PaymentConfirmation_End_di" bpmnElement="Flow_PaymentConfirmation_End">
+        <di:waypoint x="610" y="178" />
+        <di:waypoint x="675" y="178" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_PaymentConfirmationTimeout_MarkTimeout_di" bpmnElement="Flow_PaymentConfirmationTimeout_MarkTimeout">
+        <di:waypoint x="525" y="236" />
+        <di:waypoint x="525" y="310" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_MarkPaymentTimedOut_End_di" bpmnElement="Flow_MarkPaymentTimedOut_End">
+        <di:waypoint x="595" y="350" />
+        <di:waypoint x="675" y="350" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

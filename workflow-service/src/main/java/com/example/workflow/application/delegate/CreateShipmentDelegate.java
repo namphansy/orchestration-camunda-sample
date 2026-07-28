@@ -22,7 +22,7 @@ public class CreateShipmentDelegate implements JavaDelegate {
 
     @Override
     public void execute(DelegateExecution execution) {
-        String businessKey = execution.getBusinessKey();
+        String businessKey = businessKey(execution);
         String correlationId = String.valueOf(execution.getVariable(ProcessVariables.CORRELATION_ID));
         OrderClient.OrderDetailsResponse order = orderClient.getOrder(businessKey);
         try {
@@ -42,5 +42,14 @@ public class CreateShipmentDelegate implements JavaDelegate {
             execution.setVariable(ProcessVariables.FAILURE_REASON, exception.getMessage());
             throw new BpmnError("SHIPMENT_FAILED", exception.getMessage());
         }
+    }
+
+    private String businessKey(DelegateExecution execution) {
+        String businessKey = execution.getBusinessKey();
+        if (businessKey != null && !businessKey.isBlank()) {
+            return businessKey;
+        }
+        Object value = execution.getVariable(ProcessVariables.BUSINESS_KEY);
+        return value == null ? null : String.valueOf(value);
     }
 }

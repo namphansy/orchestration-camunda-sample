@@ -10,6 +10,8 @@ import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Scope;
+import java.util.ArrayList;
+import java.util.List;
 import org.camunda.bpm.engine.delegate.BpmnError;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
@@ -38,21 +40,22 @@ public class ReserveInventoryDelegate implements JavaDelegate {
         try (Scope ignored = span.makeCurrent()) {
             String businessKey = execution.getBusinessKey();
             String correlationId = stringVariable(execution, ProcessVariables.CORRELATION_ID);
-            OrderClient.OrderDetailsResponse order = orderClient.getOrder(businessKey);
+            OrderClient.OrderLine orderLine = currentOrderLine(execution, businessKey);
             span.setAttribute("order.id", businessKey);
-            span.setAttribute("inventory.sku", order.sku());
-            span.setAttribute("inventory.quantity", order.quantity());
+            span.setAttribute("inventory.sku", orderLine.sku());
+            span.setAttribute("inventory.quantity", orderLine.quantity());
 
             LOGGER.info("Reserving inventory. businessKey={}, correlationId={}, sku={}, quantity={}",
-                    businessKey, correlationId, order.sku(), order.quantity());
+                    businessKey, correlationId, orderLine.sku(), orderLine.quantity());
             try {
                 InventoryClient.InventoryReservationResponse reservation = inventoryClient.reserveInventory(
-                        new InventoryReservationRequest(businessKey, order.sku(), order.quantity(), correlationId),
-                        "inventory-reservation:" + businessKey
+                        new InventoryReservationRequest(businessKey, orderLine.sku(), orderLine.quantity(), correlationId),
+                        inventoryReservationIdempotencyKey(execution, businessKey, orderLine)
                 );
                 span.setAttribute("inventory.reservation.id", reservation.reservationId());
                 span.setAttribute("inventory.status", "RESERVED");
                 execution.setVariable(ProcessVariables.INVENTORY_RESERVATION_ID, reservation.reservationId());
+                execution.setVariable(ProcessVariables.INVENTORY_RESERVATION_IDS, appendReservationId(execution, reservation.reservationId()));
                 execution.setVariable(ProcessVariables.INVENTORY_STATUS, "RESERVED");
             } catch (InsufficientStockException exception) {
                 span.recordException(exception);
@@ -69,6 +72,39 @@ public class ReserveInventoryDelegate implements JavaDelegate {
         } finally {
             span.end();
         }
+    }
+
+    private OrderClient.OrderLine currentOrderLine(DelegateExecution execution, String businessKey) {
+        Object line = execution.getVariable("orderLine");
+        if (line instanceof OrderClient.OrderLine orderLine) {
+            return orderLine;
+        }
+        OrderClient.OrderDetailsResponse order = orderClient.getOrder(businessKey);
+        return new OrderClient.OrderLine(order.sku(), order.quantity());
+    }
+
+    private String inventoryReservationIdempotencyKey(
+            DelegateExecution execution,
+            String businessKey,
+            OrderClient.OrderLine orderLine
+    ) {
+        Object nrOfInstances = execution.getVariable("nrOfInstances");
+        if (nrOfInstances instanceof Number instances && instances.intValue() > 1) {
+            return "inventory-reservation:" + businessKey + ":" + orderLine.sku();
+        }
+        return "inventory-reservation:" + businessKey;
+    }
+
+    private List<String> appendReservationId(DelegateExecution execution, String reservationId) {
+        Object existing = execution.getVariable(ProcessVariables.INVENTORY_RESERVATION_IDS);
+        List<String> reservationIds = new ArrayList<>();
+        if (existing instanceof List<?> values) {
+            values.stream()
+                    .map(String::valueOf)
+                    .forEach(reservationIds::add);
+        }
+        reservationIds.add(reservationId);
+        return reservationIds;
     }
 
     private Span startDelegateSpan(String spanName, DelegateExecution execution) {

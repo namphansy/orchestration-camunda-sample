@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_NotificationSubprocess" targetNamespace="http://example.com/workflow/notification" exporter="Camunda Modeler" exporterVersion="5.49.0">
+  <bpmn:process id="notification-subprocess" name="Notification Subprocess" isExecutable="true">
+    <bpmn:startEvent id="StartNotification" name="Start Notification">
+      <bpmn:outgoing>Flow_Start_Fork</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:parallelGateway id="FulfillmentFork" name="Start Parallel Work">
+      <bpmn:incoming>Flow_Start_Fork</bpmn:incoming>
+      <bpmn:outgoing>Flow_Fork_GenerateInvoice</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Fork_PublishNotification</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:serviceTask id="GenerateInvoice" name="Generate Invoice" camunda:delegateExpression="${generateInvoiceDelegate}">
+      <bpmn:incoming>Flow_Fork_GenerateInvoice</bpmn:incoming>
+      <bpmn:outgoing>Flow_GenerateInvoice_Join</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="PublishNotification" name="Publish Notification" camunda:delegateExpression="${publishNotificationDelegate}">
+      <bpmn:incoming>Flow_Fork_PublishNotification</bpmn:incoming>
+      <bpmn:outgoing>Flow_PublishNotification_Join</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:parallelGateway id="FulfillmentJoin" name="Parallel Work Complete">
+      <bpmn:incoming>Flow_GenerateInvoice_Join</bpmn:incoming>
+      <bpmn:incoming>Flow_PublishNotification_Join</bpmn:incoming>
+      <bpmn:outgoing>Flow_Join_End</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:endEvent id="NotificationCompleted" name="Notification Completed">
+      <bpmn:incoming>Flow_Join_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Start_Fork" sourceRef="StartNotification" targetRef="FulfillmentFork" />
+    <bpmn:sequenceFlow id="Flow_Fork_GenerateInvoice" sourceRef="FulfillmentFork" targetRef="GenerateInvoice" />
+    <bpmn:sequenceFlow id="Flow_Fork_PublishNotification" sourceRef="FulfillmentFork" targetRef="PublishNotification" />
+    <bpmn:sequenceFlow id="Flow_GenerateInvoice_Join" sourceRef="GenerateInvoice" targetRef="FulfillmentJoin" />
+    <bpmn:sequenceFlow id="Flow_PublishNotification_Join" sourceRef="PublishNotification" targetRef="FulfillmentJoin" />
+    <bpmn:sequenceFlow id="Flow_Join_End" sourceRef="FulfillmentJoin" targetRef="NotificationCompleted" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_NotificationSubprocess">
+    <bpmndi:BPMNPlane id="BPMNPlane_NotificationSubprocess" bpmnElement="notification-subprocess">
+      <bpmndi:BPMNShape id="StartNotification_di" bpmnElement="StartNotification">
+        <dc:Bounds x="160" y="170" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="138" y="206" width="81" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="FulfillmentFork_di" bpmnElement="FulfillmentFork" isMarkerVisible="true">
+        <dc:Bounds x="260" y="163" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="319.5" y="174" width="63" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GenerateInvoice_di" bpmnElement="GenerateInvoice">
+        <dc:Bounds x="380" y="80" width="140" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="PublishNotification_di" bpmnElement="PublishNotification">
+        <dc:Bounds x="380" y="225" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="FulfillmentJoin_di" bpmnElement="FulfillmentJoin" isMarkerVisible="true">
+        <dc:Bounds x="620" y="163" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="557" y="174" width="66" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="NotificationCompleted_di" bpmnElement="NotificationCompleted">
+        <dc:Bounds x="740" y="170" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="730" y="216" width="55" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Start_Fork_di" bpmnElement="Flow_Start_Fork">
+        <di:waypoint x="196" y="188" />
+        <di:waypoint x="260" y="188" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Fork_GenerateInvoice_di" bpmnElement="Flow_Fork_GenerateInvoice">
+        <di:waypoint x="285" y="163" />
+        <di:waypoint x="285" y="120" />
+        <di:waypoint x="380" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Fork_PublishNotification_di" bpmnElement="Flow_Fork_PublishNotification">
+        <di:waypoint x="285" y="213" />
+        <di:waypoint x="285" y="265" />
+        <di:waypoint x="380" y="265" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_GenerateInvoice_Join_di" bpmnElement="Flow_GenerateInvoice_Join">
+        <di:waypoint x="520" y="120" />
+        <di:waypoint x="645" y="120" />
+        <di:waypoint x="645" y="163" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_PublishNotification_Join_di" bpmnElement="Flow_PublishNotification_Join">
+        <di:waypoint x="540" y="265" />
+        <di:waypoint x="645" y="265" />
+        <di:waypoint x="645" y="213" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Join_End_di" bpmnElement="Flow_Join_End">
+        <di:waypoint x="670" y="188" />
+        <di:waypoint x="740" y="188" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
