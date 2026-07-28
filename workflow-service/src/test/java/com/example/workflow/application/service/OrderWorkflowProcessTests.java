@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -15,6 +16,8 @@ import com.example.workflow.infrastructure.client.NotificationClient;
 import com.example.workflow.infrastructure.client.OrderClient;
 import com.example.workflow.infrastructure.client.PaymentClient;
 import com.example.workflow.infrastructure.client.PaymentDeclinedException;
+import com.example.workflow.infrastructure.client.ShippingClient;
+import com.example.workflow.infrastructure.client.ShippingFailedException;
 import java.math.BigDecimal;
 import java.util.Map;
 import org.camunda.bpm.engine.HistoryService;
@@ -51,6 +54,9 @@ class OrderWorkflowProcessTests {
 
     @MockBean
     private PaymentClient paymentClient;
+
+    @MockBean
+    private ShippingClient shippingClient;
 
     @MockBean
     private InvoiceClient invoiceClient;
@@ -115,6 +121,7 @@ class OrderWorkflowProcessTests {
                         "correlation-process-test-1",
                         null
                 ));
+        stubShippingCreated(businessKey, "correlation-process-test-1");
         stubInvoiceGenerated(businessKey, "correlation-process-test-1");
         stubNotificationPublished(businessKey, "correlation-process-test-1");
 
@@ -165,6 +172,7 @@ class OrderWorkflowProcessTests {
         stubInventoryReserved(businessKey, correlationId);
         stubOrder(businessKey, new BigDecimal("5000.00"), 1, correlationId);
         stubPaymentCharged(businessKey, new BigDecimal("5000.00"), correlationId);
+        stubShippingCreated(businessKey, correlationId);
         stubInvoiceGenerated(businessKey, correlationId);
         stubNotificationPublished(businessKey, correlationId);
 
@@ -187,6 +195,7 @@ class OrderWorkflowProcessTests {
                 .singleResult()).isNull();
         assertHistoricVariable(processInstance, ProcessVariables.ORDER_STATUS, "COMPLETED");
         assertHistoricVariable(processInstance, ProcessVariables.APPROVER, "manager-1");
+        assertHistoricVariable(processInstance, ProcessVariables.SHIPMENT_STATUS, "CREATED");
     }
 
     @Test
@@ -302,6 +311,53 @@ class OrderWorkflowProcessTests {
     }
 
     @Test
+    void shipmentFailureRefundsPaymentAndReleasesInventory() {
+        String businessKey = "order-process-test-shipment-failure";
+        String correlationId = "correlation-process-test-shipment-failure";
+        stubInventoryReserved(businessKey, correlationId);
+        stubOrder(businessKey, new BigDecimal("120.50"), 1, correlationId);
+        stubPaymentCharged(businessKey, new BigDecimal("120.50"), correlationId);
+        when(shippingClient.createShipment(any(), eq("shipment-creation:" + businessKey)))
+                .thenThrow(new ShippingFailedException("Carrier rejected shipment creation"));
+        when(paymentClient.refundPayment("payment-" + businessKey, "payment-refund:" + businessKey))
+                .thenReturn(new PaymentClient.PaymentChargeResponse(
+                        "payment-" + businessKey,
+                        businessKey,
+                        new BigDecimal("120.50"),
+                        "USD",
+                        "REFUNDED",
+                        correlationId,
+                        null
+                ));
+        when(inventoryClient.releaseInventory("reservation-" + businessKey, "inventory-release:" + businessKey))
+                .thenReturn(new InventoryClient.InventoryReservationResponse(
+                        "reservation-" + businessKey,
+                        businessKey,
+                        "SKU-DEFAULT",
+                        1,
+                        "RELEASED",
+                        correlationId
+                ));
+
+        ProcessInstance processInstance = startOrderProcess(businessKey, correlationId);
+
+        executeSinglePaymentJob(processInstance);
+        confirmPayment(processInstance, businessKey, correlationId, "payment-" + businessKey, "CHARGED");
+
+        assertThat(runtimeService.createProcessInstanceQuery()
+                .processInstanceId(processInstance.getProcessInstanceId())
+                .singleResult()).isNull();
+        assertHistoricVariable(processInstance, ProcessVariables.ORDER_STATUS, "REJECTED");
+        assertHistoricVariable(processInstance, ProcessVariables.SHIPMENT_STATUS, "FAILED");
+        assertHistoricVariable(processInstance, ProcessVariables.PAYMENT_STATUS, "REFUNDED");
+        assertHistoricVariable(processInstance, ProcessVariables.PAYMENT_REFUND_STATUS, "REFUNDED");
+        assertHistoricVariable(processInstance, ProcessVariables.INVENTORY_STATUS, "RELEASED");
+        assertHistoricVariable(processInstance, ProcessVariables.INVENTORY_RELEASE_STATUS, "RELEASED");
+        verify(paymentClient, times(1)).refundPayment("payment-" + businessKey, "payment-refund:" + businessKey);
+        verify(inventoryClient, times(1)).releaseInventory("reservation-" + businessKey, "inventory-release:" + businessKey);
+    }
+
+    @Test
     void technicalPaymentFailureIsRetriedAndCreatesIncidentAfterRetriesAreExhausted() {
         String businessKey = "order-process-test-payment-technical-failure";
         stubInventoryReserved(businessKey, "correlation-process-test-payment-technical-failure");
@@ -348,6 +404,7 @@ class OrderWorkflowProcessTests {
                         correlationId,
                         null
                 ));
+        stubShippingCreated(businessKey, correlationId);
         stubInvoiceGenerated(businessKey, correlationId);
         when(notificationClient.publishNotification(any()))
                 .thenThrow(new IllegalStateException("Notification broker unavailable"));
@@ -385,6 +442,7 @@ class OrderWorkflowProcessTests {
         stubInventoryReserved(businessKey, correlationId);
         stubOrder(businessKey, new BigDecimal("120.50"), 1, correlationId);
         stubPaymentCharged(businessKey, new BigDecimal("120.50"), correlationId);
+        stubShippingCreated(businessKey, correlationId);
         stubInvoiceGenerated(businessKey, correlationId);
         stubNotificationPublished(businessKey, correlationId);
 
@@ -494,6 +552,19 @@ class OrderWorkflowProcessTests {
                         amount,
                         "USD",
                         "CHARGED",
+                        correlationId,
+                        null
+                ));
+    }
+
+    private void stubShippingCreated(String businessKey, String correlationId) {
+        when(shippingClient.createShipment(any(), eq("shipment-creation:" + businessKey)))
+                .thenReturn(new ShippingClient.ShipmentResponse(
+                        "shipment-" + businessKey,
+                        businessKey,
+                        "SKU-DEFAULT",
+                        1,
+                        "CREATED",
                         correlationId,
                         null
                 ));

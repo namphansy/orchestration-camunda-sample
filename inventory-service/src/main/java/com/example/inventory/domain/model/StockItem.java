@@ -28,6 +28,10 @@ public class StockItem {
         availableQuantity -= quantity;
     }
 
+    public void release(Integer quantity) {
+        availableQuantity += quantity;
+    }
+
     public String getSku() {
         return sku;
     }

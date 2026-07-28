@@ -33,6 +33,9 @@ class InventoryControllerTests {
                   "correlationId": "correlation-inventory-test-1"
                 }
                 """;
+        Integer startingQuantity = stockItemRepository.findById("SKU-DEFAULT")
+                .orElseThrow()
+                .getAvailableQuantity();
 
         mockMvc.perform(post("/api/inventory/reservations")
                         .header("Idempotency-Key", "inventory-test-key-1")
@@ -51,7 +54,48 @@ class InventoryControllerTests {
         Integer availableQuantity = stockItemRepository.findById("SKU-DEFAULT")
                 .orElseThrow()
                 .getAvailableQuantity();
-        assertThat(availableQuantity).isEqualTo(95);
+        assertThat(availableQuantity).isEqualTo(startingQuantity - 5);
+    }
+
+    @Test
+    void duplicateReleaseRequestDoesNotIncrementStockTwice() throws Exception {
+        String requestBody = """
+                {
+                  "orderId": "inventory-order-test-release",
+                  "sku": "SKU-DEFAULT",
+                  "quantity": 4,
+                  "correlationId": "correlation-inventory-test-release"
+                }
+                """;
+        Integer startingQuantity = stockItemRepository.findById("SKU-DEFAULT")
+                .orElseThrow()
+                .getAvailableQuantity();
+
+        String reservationId = mockMvc.perform(post("/api/inventory/reservations")
+                        .header("Idempotency-Key", "inventory-test-key-release-reserve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("RESERVED"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString()
+                .replaceAll(".*\"reservationId\":\"([^\"]+)\".*", "$1");
+
+        mockMvc.perform(post("/api/inventory/reservations/{reservationId}/release", reservationId)
+                        .header("Idempotency-Key", "inventory-test-key-release"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("RELEASED"));
+
+        mockMvc.perform(post("/api/inventory/reservations/{reservationId}/release", reservationId)
+                        .header("Idempotency-Key", "inventory-test-key-release"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("RELEASED"));
+
+        Integer availableQuantity = stockItemRepository.findById("SKU-DEFAULT")
+                .orElseThrow()
+                .getAvailableQuantity();
+        assertThat(availableQuantity).isEqualTo(startingQuantity);
     }
 
     @Test

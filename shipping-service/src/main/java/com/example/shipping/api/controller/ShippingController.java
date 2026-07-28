@@ -1,8 +1,8 @@
-package com.example.payment.api.controller;
+package com.example.shipping.api.controller;
 
-import com.example.payment.api.request.ChargePaymentRequest;
-import com.example.payment.api.response.PaymentTransactionResponse;
-import com.example.payment.application.service.PaymentService;
+import com.example.shipping.api.request.CreateShipmentRequest;
+import com.example.shipping.api.response.ShipmentResponse;
+import com.example.shipping.application.service.ShippingService;
 import jakarta.validation.Valid;
 import java.time.Instant;
 import java.util.Map;
@@ -18,35 +18,35 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/payments")
-public class PaymentController {
+@RequestMapping("/api/shipments")
+public class ShippingController {
 
-    private final PaymentService paymentService;
+    private final ShippingService shippingService;
 
-    public PaymentController(PaymentService paymentService) {
-        this.paymentService = paymentService;
+    public ShippingController(ShippingService shippingService) {
+        this.shippingService = shippingService;
     }
 
-    @PostMapping("/charges")
+    @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public PaymentTransactionResponse charge(
+    public ShipmentResponse createShipment(
             @RequestHeader("Idempotency-Key") String idempotencyKey,
-            @Valid @RequestBody ChargePaymentRequest request
+            @Valid @RequestBody CreateShipmentRequest request
     ) {
-        return paymentService.charge(request, idempotencyKey);
+        return shippingService.createShipment(request, idempotencyKey);
     }
 
-    @GetMapping("/transactions/{transactionId}")
-    public PaymentTransactionResponse getTransaction(@PathVariable("transactionId") String transactionId) {
-        return paymentService.getTransaction(transactionId);
-    }
-
-    @PostMapping("/transactions/{transactionId}/refund")
-    public PaymentTransactionResponse refund(
-            @PathVariable("transactionId") String transactionId,
+    @PostMapping("/{shipmentId}/cancel")
+    public ShipmentResponse cancelShipment(
+            @PathVariable("shipmentId") String shipmentId,
             @RequestHeader("Idempotency-Key") String idempotencyKey
     ) {
-        return paymentService.refund(transactionId, idempotencyKey);
+        return shippingService.cancelShipment(shipmentId, idempotencyKey);
+    }
+
+    @GetMapping("/{shipmentId}")
+    public ShipmentResponse getShipment(@PathVariable("shipmentId") String shipmentId) {
+        return shippingService.getShipment(shipmentId);
     }
 
     @ExceptionHandler(IllegalStateException.class)
@@ -54,8 +54,8 @@ public class PaymentController {
     public Map<String, Object> handleTechnicalFailure(IllegalStateException exception) {
         return Map.of(
                 "timestamp", Instant.now().toString(),
-                "service", "payment-service",
-                "errorCode", "PAYMENT_TECHNICAL_FAILURE",
+                "service", "shipping-service",
+                "errorCode", "SHIPPING_TECHNICAL_FAILURE",
                 "message", exception.getMessage(),
                 "details", Map.of()
         );

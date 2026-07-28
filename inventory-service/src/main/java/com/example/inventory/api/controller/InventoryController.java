@@ -38,8 +38,16 @@ public class InventoryController {
     }
 
     @GetMapping("/reservations/{reservationId}")
-    public InventoryReservationResponse getReservation(@PathVariable String reservationId) {
+    public InventoryReservationResponse getReservation(@PathVariable("reservationId") String reservationId) {
         return reservationService.getReservation(reservationId);
+    }
+
+    @PostMapping("/reservations/{reservationId}/release")
+    public InventoryReservationResponse release(
+            @PathVariable("reservationId") String reservationId,
+            @RequestHeader("Idempotency-Key") String idempotencyKey
+    ) {
+        return reservationService.release(reservationId, idempotencyKey);
     }
 
     @ExceptionHandler(InsufficientStockException.class)

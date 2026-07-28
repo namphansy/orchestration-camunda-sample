@@ -1,4 +1,4 @@
-package com.example.inventory.domain.model;
+package com.example.shipping.domain.model;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -9,12 +9,12 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 
 @Entity
-@Table(name = "inventory_reservations")
-public class InventoryReservation {
+@Table(name = "shipments")
+public class Shipment {
 
     @Id
-    @Column(name = "reservation_id", nullable = false, length = 64)
-    private String reservationId;
+    @Column(name = "shipment_id", nullable = false, length = 64)
+    private String shipmentId;
 
     @Column(name = "order_id", nullable = false, length = 64)
     private String orderId;
@@ -27,7 +27,7 @@ public class InventoryReservation {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
-    private ReservationStatus status;
+    private ShipmentStatus status;
 
     @Column(name = "idempotency_key", nullable = false, unique = true, length = 128)
     private String idempotencyKey;
@@ -35,32 +35,41 @@ public class InventoryReservation {
     @Column(name = "correlation_id", nullable = false, length = 64)
     private String correlationId;
 
+    @Column(name = "failure_reason", length = 255)
+    private String failureReason;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    @Column(name = "release_idempotency_key", length = 128)
-    private String releaseIdempotencyKey;
+    @Column(name = "cancelled_at")
+    private Instant cancelledAt;
 
-    @Column(name = "released_at")
-    private Instant releasedAt;
-
-    protected InventoryReservation() {
+    protected Shipment() {
     }
 
-    public InventoryReservation(String reservationId, String orderId, String sku, Integer quantity,
-                                String idempotencyKey, String correlationId) {
-        this.reservationId = reservationId;
+    public Shipment(String shipmentId, String orderId, String sku, Integer quantity, ShipmentStatus status,
+                    String idempotencyKey, String correlationId, String failureReason) {
+        this.shipmentId = shipmentId;
         this.orderId = orderId;
         this.sku = sku;
         this.quantity = quantity;
+        this.status = status;
         this.idempotencyKey = idempotencyKey;
         this.correlationId = correlationId;
-        this.status = ReservationStatus.RESERVED;
+        this.failureReason = failureReason;
         this.createdAt = Instant.now();
     }
 
-    public String getReservationId() {
-        return reservationId;
+    public void cancel() {
+        if (status == ShipmentStatus.CANCELLED) {
+            return;
+        }
+        status = ShipmentStatus.CANCELLED;
+        cancelledAt = Instant.now();
+    }
+
+    public String getShipmentId() {
+        return shipmentId;
     }
 
     public String getOrderId() {
@@ -75,7 +84,7 @@ public class InventoryReservation {
         return quantity;
     }
 
-    public ReservationStatus getStatus() {
+    public ShipmentStatus getStatus() {
         return status;
     }
 
@@ -83,12 +92,7 @@ public class InventoryReservation {
         return correlationId;
     }
 
-    public void release(String releaseIdempotencyKey) {
-        if (status == ReservationStatus.RELEASED) {
-            return;
-        }
-        status = ReservationStatus.RELEASED;
-        this.releaseIdempotencyKey = releaseIdempotencyKey;
-        releasedAt = Instant.now();
+    public String getFailureReason() {
+        return failureReason;
     }
 }

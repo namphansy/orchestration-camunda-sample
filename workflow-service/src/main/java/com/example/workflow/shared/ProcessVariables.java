@@ -11,6 +11,7 @@ public final class ProcessVariables {
     public static final String PAYMENT_STATUS = "paymentStatus";
     public static final String PAYMENT_TRANSACTION_ID = "paymentTransactionId";
     public static final String PAYMENT_CONFIRMED = "paymentConfirmed";
+    public static final String PAYMENT_REFUND_STATUS = "paymentRefundStatus";
     public static final String ORDER_AMOUNT = "orderAmount";
     public static final String APPROVAL_LEVEL = "approvalLevel";
     public static final String APPROVED = "approved";
@@ -19,6 +20,9 @@ public final class ProcessVariables {
     public static final String INVOICE_STATUS = "invoiceStatus";
     public static final String NOTIFICATION_ID = "notificationId";
     public static final String NOTIFICATION_STATUS = "notificationStatus";
+    public static final String SHIPMENT_ID = "shipmentId";
+    public static final String SHIPMENT_STATUS = "shipmentStatus";
+    public static final String INVENTORY_RELEASE_STATUS = "inventoryReleaseStatus";
     public static final String FAILURE_REASON = "failureReason";
 
     private ProcessVariables() {

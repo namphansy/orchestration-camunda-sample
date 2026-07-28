@@ -90,6 +90,28 @@ public class InventoryReservationService {
                 .orElseThrow(() -> new IllegalArgumentException("Reservation not found: " + reservationId));
     }
 
+    @Transactional
+    public InventoryReservationResponse release(String reservationId, String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new IllegalArgumentException("Idempotency-Key header is required");
+        }
+        InventoryReservation reservation = reservationRepository.findById(reservationId)
+                .orElseThrow(() -> new IllegalArgumentException("Reservation not found: " + reservationId));
+        if (reservation.getStatus() == com.example.inventory.domain.model.ReservationStatus.RELEASED) {
+            LOGGER.info("Inventory release idempotency hit. reservationId={}, orderId={}, idempotencyKey={}",
+                    reservationId, reservation.getOrderId(), idempotencyKey);
+            return InventoryReservationResponse.from(reservation);
+        }
+
+        StockItem stockItem = stockItemRepository.findById(reservation.getSku())
+                .orElseThrow(() -> new IllegalArgumentException("Stock item not found: " + reservation.getSku()));
+        stockItem.release(reservation.getQuantity());
+        reservation.release(idempotencyKey);
+        LOGGER.info("Inventory reservation released. reservationId={}, orderId={}, sku={}, quantity={}, idempotencyKey={}",
+                reservationId, reservation.getOrderId(), reservation.getSku(), reservation.getQuantity(), idempotencyKey);
+        return InventoryReservationResponse.from(reservation);
+    }
+
     private InventoryReservationResponse createReservation(ReserveInventoryRequest request, String idempotencyKey) {
         StockItem stockItem = stockItemRepository.findById(request.sku())
                 .orElseThrow(() -> new InsufficientStockException(request.sku(), request.quantity(), 0));

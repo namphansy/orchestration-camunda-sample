@@ -89,6 +89,44 @@ class PaymentControllerTests {
     }
 
     @Test
+    void duplicateRefundRequestDoesNotCreateDuplicateRefund() throws Exception {
+        String requestBody = """
+                {
+                  "orderId": "payment-order-test-refund",
+                  "amount": 90.00,
+                  "currency": "USD",
+                  "correlationId": "correlation-payment-test-refund"
+                }
+                """;
+
+        String transactionId = mockMvc.perform(post("/api/payments/charges")
+                        .header("Idempotency-Key", "payment-test-key-refund-charge")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("CHARGED"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString()
+                .replaceAll(".*\"transactionId\":\"([^\"]+)\".*", "$1");
+
+        mockMvc.perform(post("/api/payments/transactions/{transactionId}/refund", transactionId)
+                        .header("Idempotency-Key", "payment-test-key-refund"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("REFUNDED"));
+
+        mockMvc.perform(post("/api/payments/transactions/{transactionId}/refund", transactionId)
+                        .header("Idempotency-Key", "payment-test-key-refund"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("REFUNDED"));
+
+        assertThat(transactionRepository.findAll())
+                .filteredOn(transaction -> transaction.getOrderId().equals("payment-order-test-refund"))
+                .hasSize(1)
+                .allSatisfy(transaction -> assertThat(transaction.getStatus().name()).isEqualTo("REFUNDED"));
+    }
+
+    @Test
     void technicalFailureSimulationReturnsServiceUnavailableWithoutTransaction() throws Exception {
         mockMvc.perform(post("/api/payments/charges")
                         .header("Idempotency-Key", "payment-test-key-failure")

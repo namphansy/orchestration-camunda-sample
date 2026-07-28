@@ -1,8 +1,17 @@
 spring:
   application:
     name: shipping-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/shipping_service}
+    driver-class-name: org.postgresql.Driver
+    username: ${SPRING_DATASOURCE_USERNAME:camunda}
+    password: ${SPRING_DATASOURCE_PASSWORD:camunda}
   flyway:
-    enabled: false
+    enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
 
 server:
   port: 8084
@@ -21,3 +30,6 @@ management:
     tags:
       service: ${spring.application.name}
 
+logging:
+  pattern:
+    level: "%5p [trace_id=%X{trace_id:-},span_id=%X{span_id:-}]"

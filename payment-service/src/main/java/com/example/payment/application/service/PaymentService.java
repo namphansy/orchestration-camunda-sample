@@ -91,6 +91,36 @@ public class PaymentService {
                 .orElseThrow(() -> new IllegalArgumentException("Payment transaction not found: " + transactionId));
     }
 
+    @Transactional
+    public PaymentTransactionResponse refund(String transactionId, String idempotencyKey) {
+        Span span = tracer.spanBuilder("payment.refund").startSpan();
+        try (Scope ignored = span.makeCurrent()) {
+            if (idempotencyKey == null || idempotencyKey.isBlank()) {
+                throw new IllegalArgumentException("Idempotency-Key header is required");
+            }
+            span.setAttribute("payment.transaction.id", transactionId);
+            span.setAttribute("idempotency.key", idempotencyKey);
+
+            PaymentTransaction transaction = transactionRepository.findById(transactionId)
+                    .orElseThrow(() -> new IllegalArgumentException("Payment transaction not found: " + transactionId));
+            if (transaction.getStatus() == PaymentStatus.DECLINED) {
+                LOGGER.info("Skipping refund for declined payment. transactionId={}, orderId={}, idempotencyKey={}",
+                        transactionId, transaction.getOrderId(), idempotencyKey);
+                return PaymentTransactionResponse.from(transaction);
+            }
+            transaction.refund(idempotencyKey);
+            LOGGER.info("Payment refunded. transactionId={}, orderId={}, correlationId={}, idempotencyKey={}",
+                    transactionId, transaction.getOrderId(), transaction.getCorrelationId(), idempotencyKey);
+            return PaymentTransactionResponse.from(transaction);
+        } catch (RuntimeException exception) {
+            span.recordException(exception);
+            span.setStatus(StatusCode.ERROR, exception.getMessage());
+            throw exception;
+        } finally {
+            span.end();
+        }
+    }
+
     private PaymentTransactionResponse createTransaction(ChargePaymentRequest request, String idempotencyKey) {
         PaymentStatus status = shouldDecline(request) ? PaymentStatus.DECLINED : PaymentStatus.CHARGED;
         String failureReason = status == PaymentStatus.DECLINED ? "Payment declined by configured rule" : null;
