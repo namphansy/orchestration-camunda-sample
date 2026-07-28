@@ -11,13 +11,16 @@ import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Scope;
-import java.util.List;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class OrderService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(OrderService.class);
 
     private final Tracer tracer = GlobalOpenTelemetry.getTracer(OrderService.class.getName());
 
@@ -38,13 +41,18 @@ public class OrderService {
             span.setAttribute("order.sku", request.sku());
             span.setAttribute("order.quantity", request.quantity());
 
+            LOGGER.info("Creating order. orderId={}, customerId={}, correlationId={}",
+                    request.orderId(), request.customerId(), request.correlationId());
             orderRepository.findById(request.orderId())
                     .ifPresent(existing -> {
+                        LOGGER.warn("Order creation rejected because order already exists. orderId={}", existing.getOrderId());
                         throw new IllegalArgumentException("Order already exists: " + existing.getOrderId());
                     });
 
             String correlationId = normalizeCorrelationId(request.correlationId());
             span.setAttribute("correlation.id", correlationId);
+            LOGGER.info("Persisting order before workflow start. orderId={}, correlationId={}",
+                    request.orderId(), correlationId);
             OrderEntity order = new OrderEntity(
                     request.orderId(),
                     request.customerId(),
@@ -56,12 +64,19 @@ public class OrderService {
             );
             orderRepository.saveAndFlush(order);
 
+            LOGGER.info("Starting workflow for order. orderId={}, correlationId={}", request.orderId(), correlationId);
             WorkflowClient.WorkflowStartResponse workflow = workflowClient.startOrderWorkflow(request, correlationId);
             span.setAttribute("camunda.process_instance.id", workflow.processInstanceId());
+            LOGGER.info("Workflow started for order. orderId={}, correlationId={}, processInstanceId={}, workflowStatus={}",
+                    request.orderId(), correlationId, workflow.processInstanceId(), workflow.status());
             order.markProcessing(workflow.processInstanceId());
+            orderRepository.saveAndFlush(order);
+            LOGGER.info("Order marked processing. orderId={}, processInstanceId={}",
+                    order.getOrderId(), workflow.processInstanceId());
 
             return OrderResponse.from(order);
         } catch (RuntimeException exception) {
+            LOGGER.error("Order creation failed. orderId={}, message={}", request.orderId(), exception.getMessage(), exception);
             span.recordException(exception);
             span.setStatus(StatusCode.ERROR, exception.getMessage());
             throw exception;

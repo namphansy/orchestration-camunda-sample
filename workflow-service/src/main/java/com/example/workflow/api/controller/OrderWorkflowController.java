@@ -1,7 +1,9 @@
 package com.example.workflow.api.controller;
 
+import com.example.workflow.api.request.ConfirmPaymentRequest;
 import com.example.workflow.api.request.StartOrderWorkflowRequest;
 import com.example.workflow.api.response.OrderWorkflowResponse;
+import com.example.workflow.api.response.PaymentConfirmationResponse;
 import com.example.workflow.application.service.OrderWorkflowService;
 import javax.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -33,5 +35,12 @@ public class OrderWorkflowController {
     public OrderWorkflowResponse getOrderWorkflow(@PathVariable String businessKey) {
         return orderWorkflowService.getOrderWorkflow(businessKey);
     }
-}
 
+    @PostMapping("/{businessKey}/payment-confirmations")
+    public PaymentConfirmationResponse confirmPayment(
+            @PathVariable String businessKey,
+            @Valid @RequestBody ConfirmPaymentRequest request
+    ) {
+        return orderWorkflowService.confirmPayment(businessKey, request);
+    }
+}

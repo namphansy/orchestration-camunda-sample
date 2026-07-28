@@ -2,6 +2,8 @@ package com.example.order.infrastructure.client;
 
 import com.example.order.api.request.CreateOrderRequest;
 import java.time.Duration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.stereotype.Component;
@@ -9,6 +11,8 @@ import org.springframework.web.client.RestTemplate;
 
 @Component
 public class RestWorkflowClient implements WorkflowClient {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(RestWorkflowClient.class);
 
     private final RestTemplate restTemplate;
     private final String workflowBaseUrl;
@@ -30,10 +34,17 @@ public class RestWorkflowClient implements WorkflowClient {
                 request.orderId(),
                 correlationId
         );
-        return restTemplate.postForObject(
+        LOGGER.info("Calling workflow-service to start order workflow. orderId={}, correlationId={}",
+                request.orderId(), correlationId);
+        WorkflowStartResponse response = restTemplate.postForObject(
                 workflowBaseUrl + "/api/workflows/orders",
                 workflowRequest,
                 WorkflowStartResponse.class
         );
+        if (response != null) {
+            LOGGER.info("workflow-service accepted order workflow. orderId={}, correlationId={}, processInstanceId={}, status={}",
+                    request.orderId(), correlationId, response.processInstanceId(), response.status());
+        }
+        return response;
     }
 }

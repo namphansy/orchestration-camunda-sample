@@ -43,7 +43,7 @@ public class ChargePaymentDelegate implements JavaDelegate {
             span.setAttribute("payment.amount", order.orderAmount().doubleValue());
             span.setAttribute("payment.currency", order.currency());
 
-            LOGGER.info("Charging payment. businessKey={}, correlationId={}, amount={}, currency={}",
+            LOGGER.info("Initiating payment. businessKey={}, correlationId={}, amount={}, currency={}",
                     businessKey, correlationId, order.orderAmount(), order.currency());
             try {
                 PaymentClient.PaymentChargeResponse payment = paymentClient.chargePayment(
@@ -53,7 +53,8 @@ public class ChargePaymentDelegate implements JavaDelegate {
                 span.setAttribute("payment.transaction.id", payment.transactionId());
                 span.setAttribute("payment.status", payment.status());
                 execution.setVariable(ProcessVariables.PAYMENT_TRANSACTION_ID, payment.transactionId());
-                execution.setVariable(ProcessVariables.PAYMENT_STATUS, payment.status());
+                execution.setVariable(ProcessVariables.PAYMENT_STATUS, "PENDING");
+                execution.setVariable(ProcessVariables.PAYMENT_CONFIRMED, false);
                 execution.setVariable(ProcessVariables.ORDER_AMOUNT, order.orderAmount());
             } catch (PaymentDeclinedException exception) {
                 span.recordException(exception);

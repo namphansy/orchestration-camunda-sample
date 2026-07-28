@@ -2,6 +2,7 @@
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" id="Definitions_OrderProcessing" targetNamespace="http://example.com/workflow/order" exporter="Camunda Modeler" exporterVersion="5.49.0">
   <bpmn:error id="Error_InsufficientStock" name="Insufficient Stock" errorCode="INSUFFICIENT_STOCK" />
   <bpmn:error id="Error_PaymentDeclined" name="Payment Declined" errorCode="PAYMENT_DECLINED" />
+  <bpmn:message id="Message_PaymentConfirmationReceived" name="PaymentConfirmationReceived" />
   <bpmn:process id="order-processing" name="Order Processing" isExecutable="true">
     <bpmn:startEvent id="StartOrder" name="Start Order">
       <bpmn:outgoing>Flow_Start_Validate</bpmn:outgoing>
@@ -23,14 +24,28 @@
         <camunda:failedJobRetryTimeCycle>R3/PT1S</camunda:failedJobRetryTimeCycle>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_Reserve_Charge</bpmn:incoming>
-      <bpmn:outgoing>Flow_Charge_PaymentResult</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Charge_WaitPaymentConfirmation</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:boundaryEvent id="PaymentDeclinedBoundary" name="Payment Declined" attachedToRef="ChargePayment">
       <bpmn:outgoing>Flow_PaymentDeclined_Reject</bpmn:outgoing>
       <bpmn:errorEventDefinition errorRef="Error_PaymentDeclined" />
     </bpmn:boundaryEvent>
+    <bpmn:receiveTask id="WaitForPaymentConfirmation" name="Wait for Payment Confirmation" messageRef="Message_PaymentConfirmationReceived">
+      <bpmn:incoming>Flow_Charge_WaitPaymentConfirmation</bpmn:incoming>
+      <bpmn:outgoing>Flow_PaymentConfirmation_PaymentResult</bpmn:outgoing>
+    </bpmn:receiveTask>
+    <bpmn:boundaryEvent id="PaymentConfirmationTimeoutBoundary" name="Payment Confirmation Timeout" attachedToRef="WaitForPaymentConfirmation">
+      <bpmn:outgoing>Flow_PaymentConfirmationTimeout_MarkTimeout</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT5M</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="MarkPaymentTimedOut" name="Mark Payment Timed Out" camunda:delegateExpression="${markPaymentTimedOutDelegate}">
+      <bpmn:incoming>Flow_PaymentConfirmationTimeout_MarkTimeout</bpmn:incoming>
+      <bpmn:outgoing>Flow_MarkPaymentTimedOut_Reject</bpmn:outgoing>
+    </bpmn:serviceTask>
     <bpmn:exclusiveGateway id="PaymentResultGateway" name="Payment Charged?" default="Flow_PaymentNotCharged_Reject">
-      <bpmn:incoming>Flow_Charge_PaymentResult</bpmn:incoming>
+      <bpmn:incoming>Flow_PaymentConfirmation_PaymentResult</bpmn:incoming>
       <bpmn:outgoing>Flow_PaymentCharged_DetermineApproval</bpmn:outgoing>
       <bpmn:outgoing>Flow_PaymentNotCharged_Reject</bpmn:outgoing>
     </bpmn:exclusiveGateway>
@@ -93,6 +108,7 @@
       <bpmn:incoming>Flow_PaymentDeclined_Reject</bpmn:incoming>
       <bpmn:incoming>Flow_PaymentNotCharged_Reject</bpmn:incoming>
       <bpmn:incoming>Flow_ApprovalRejected_Reject</bpmn:incoming>
+      <bpmn:incoming>Flow_MarkPaymentTimedOut_Reject</bpmn:incoming>
       <bpmn:outgoing>Flow_Reject_End</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:endEvent id="OrderRejected" name="Order Rejected">
@@ -101,7 +117,10 @@
     <bpmn:sequenceFlow id="Flow_Start_Validate" sourceRef="StartOrder" targetRef="ValidateOrder" />
     <bpmn:sequenceFlow id="Flow_Validate_Reserve" sourceRef="ValidateOrder" targetRef="ReserveInventory" />
     <bpmn:sequenceFlow id="Flow_Reserve_Charge" sourceRef="ReserveInventory" targetRef="ChargePayment" />
-    <bpmn:sequenceFlow id="Flow_Charge_PaymentResult" sourceRef="ChargePayment" targetRef="PaymentResultGateway" />
+    <bpmn:sequenceFlow id="Flow_Charge_WaitPaymentConfirmation" sourceRef="ChargePayment" targetRef="WaitForPaymentConfirmation" />
+    <bpmn:sequenceFlow id="Flow_PaymentConfirmation_PaymentResult" sourceRef="WaitForPaymentConfirmation" targetRef="PaymentResultGateway" />
+    <bpmn:sequenceFlow id="Flow_PaymentConfirmationTimeout_MarkTimeout" sourceRef="PaymentConfirmationTimeoutBoundary" targetRef="MarkPaymentTimedOut" />
+    <bpmn:sequenceFlow id="Flow_MarkPaymentTimedOut_Reject" sourceRef="MarkPaymentTimedOut" targetRef="RejectOrder" />
     <bpmn:sequenceFlow id="Flow_PaymentCharged_DetermineApproval" name="Charged" sourceRef="PaymentResultGateway" targetRef="DetermineApprovalRequirement">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${paymentStatus == 'CHARGED'}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
@@ -148,23 +167,35 @@
       <bpmndi:BPMNShape id="ChargePayment_di" bpmnElement="ChargePayment">
         <dc:Bounds x="630" y="238" width="130" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="PaymentResultGateway_di" bpmnElement="PaymentResultGateway" isMarkerVisible="true">
-        <dc:Bounds x="820" y="253" width="50" height="50" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="821" y="303" width="49" height="27" />
-        </bpmndi:BPMNLabel>
+      <bpmndi:BPMNShape id="WaitForPaymentConfirmation_di" bpmnElement="WaitForPaymentConfirmation">
+        <dc:Bounds x="790" y="238" width="170" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="DetermineApprovalRequirement_di" bpmnElement="DetermineApprovalRequirement">
-        <dc:Bounds x="930" y="238" width="170" height="80" />
+      <bpmndi:BPMNShape id="MarkPaymentTimedOut_di" bpmnElement="MarkPaymentTimedOut">
+        <dc:Bounds x="790" y="630" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="PaymentResultGateway_di" bpmnElement="PaymentResultGateway" isMarkerVisible="true">
+        <dc:Bounds x="1010" y="253" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1069.5" y="264.5" width="49" height="27" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="ApprovalGateway_di" bpmnElement="ApprovalGateway" isMarkerVisible="true">
         <dc:Bounds x="1160" y="253" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1160" y="303" width="51" height="27" />
+          <dc:Bounds x="1098.5" y="264" width="51" height="27" />
         </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ManagerApprovalTask_di" bpmnElement="ManagerApprovalTask">
+        <dc:Bounds x="1265" y="80" width="150" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="DirectorApprovalTask_di" bpmnElement="DirectorApprovalTask">
         <dc:Bounds x="1280" y="348" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ApprovalMergeGateway_di" bpmnElement="ApprovalMergeGateway" isMarkerVisible="true">
+        <dc:Bounds x="1625" y="253" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1626" y="303" width="48" height="27" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="FulfillmentFork_di" bpmnElement="FulfillmentFork">
         <dc:Bounds x="1730" y="253" width="50" height="50" />
@@ -193,28 +224,29 @@
           <dc:Bounds x="2346" y="296" width="85" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="RejectOrder_di" bpmnElement="RejectOrder">
-        <dc:Bounds x="930" y="520" width="130" height="80" />
-      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="OrderRejected_di" bpmnElement="OrderRejected">
         <dc:Bounds x="1167" y="632" width="36" height="36" />
         <bpmndi:BPMNLabel>
           <dc:Bounds x="1148" y="668" width="75" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="ManagerApprovalTask_di" bpmnElement="ManagerApprovalTask">
-        <dc:Bounds x="1265" y="80" width="150" height="80" />
+      <bpmndi:BPMNShape id="RejectOrder_di" bpmnElement="RejectOrder">
+        <dc:Bounds x="970" y="460" width="130" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="ApprovalMergeGateway_di" bpmnElement="ApprovalMergeGateway" isMarkerVisible="true">
-        <dc:Bounds x="1625" y="253" width="50" height="50" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="1626" y="303" width="48" height="27" />
-        </bpmndi:BPMNLabel>
+      <bpmndi:BPMNShape id="DetermineApprovalRequirement_di" bpmnElement="DetermineApprovalRequirement">
+        <dc:Bounds x="950" y="80" width="170" height="80" />
+        <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="ApprovalDecisionGateway_di" bpmnElement="ApprovalDecisionGateway" isMarkerVisible="true">
-        <dc:Bounds x="1515" y="193" width="50" height="50" />
+        <dc:Bounds x="1515" y="175" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1451" y="211" width="54" height="14" />
+          <dc:Bounds x="1451" y="193" width="54" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="PaymentConfirmationTimeoutBoundary_di" bpmnElement="PaymentConfirmationTimeoutBoundary">
+        <dc:Bounds x="857" y="300" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="833" y="336" width="85" height="27" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="PaymentDeclinedBoundary_di" bpmnElement="PaymentDeclinedBoundary">
@@ -241,28 +273,42 @@
         <di:waypoint x="570" y="278" />
         <di:waypoint x="630" y="278" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_Charge_PaymentResult_di" bpmnElement="Flow_Charge_PaymentResult">
+      <bpmndi:BPMNEdge id="Flow_Charge_WaitPaymentConfirmation_di" bpmnElement="Flow_Charge_WaitPaymentConfirmation">
         <di:waypoint x="760" y="278" />
-        <di:waypoint x="820" y="278" />
+        <di:waypoint x="790" y="278" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_PaymentConfirmation_PaymentResult_di" bpmnElement="Flow_PaymentConfirmation_PaymentResult">
+        <di:waypoint x="960" y="278" />
+        <di:waypoint x="1010" y="278" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_PaymentConfirmationTimeout_MarkTimeout_di" bpmnElement="Flow_PaymentConfirmationTimeout_MarkTimeout">
+        <di:waypoint x="875" y="336" />
+        <di:waypoint x="875" y="630" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_MarkPaymentTimedOut_Reject_di" bpmnElement="Flow_MarkPaymentTimedOut_Reject">
+        <di:waypoint x="875" y="630" />
+        <di:waypoint x="875" y="570" />
+        <di:waypoint x="1035" y="570" />
+        <di:waypoint x="1035" y="540" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_PaymentCharged_DetermineApproval_di" bpmnElement="Flow_PaymentCharged_DetermineApproval">
-        <di:waypoint x="870" y="278" />
-        <di:waypoint x="930" y="278" />
+        <di:waypoint x="1035" y="253" />
+        <di:waypoint x="1035" y="160" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="879" y="253" width="43" height="14" />
+          <dc:Bounds x="1000" y="241" width="43" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_PaymentNotCharged_Reject_di" bpmnElement="Flow_PaymentNotCharged_Reject">
-        <di:waypoint x="845" y="303" />
-        <di:waypoint x="845" y="560" />
-        <di:waypoint x="930" y="560" />
+        <di:waypoint x="1035" y="303" />
+        <di:waypoint x="1035" y="460" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="829" y="422" width="63" height="14" />
+          <dc:Bounds x="1114" y="480" width="63" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_DetermineApproval_ApprovalGateway_di" bpmnElement="Flow_DetermineApproval_ApprovalGateway">
-        <di:waypoint x="1100" y="278" />
-        <di:waypoint x="1160" y="278" />
+        <di:waypoint x="1120" y="120" />
+        <di:waypoint x="1185" y="120" />
+        <di:waypoint x="1185" y="253" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_NoApproval_Fork_di" bpmnElement="Flow_NoApproval_Fork">
         <di:waypoint x="1210" y="278" />
@@ -290,28 +336,28 @@
       <bpmndi:BPMNEdge id="Flow_ManagerApproval_Decision_di" bpmnElement="Flow_ManagerApproval_Decision">
         <di:waypoint x="1415" y="120" />
         <di:waypoint x="1540" y="120" />
-        <di:waypoint x="1540" y="193" />
+        <di:waypoint x="1540" y="175" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_DirectorApproval_Decision_di" bpmnElement="Flow_DirectorApproval_Decision">
         <di:waypoint x="1430" y="388" />
         <di:waypoint x="1540" y="388" />
-        <di:waypoint x="1540" y="243" />
+        <di:waypoint x="1540" y="225" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ApprovalAccepted_Fork_di" bpmnElement="Flow_ApprovalAccepted_Fork">
-        <di:waypoint x="1565" y="218" />
-        <di:waypoint x="1600" y="218" />
+        <di:waypoint x="1565" y="200" />
+        <di:waypoint x="1600" y="200" />
         <di:waypoint x="1600" y="278" />
         <di:waypoint x="1625" y="278" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1584" y="225" width="48" height="14" />
+          <dc:Bounds x="1584" y="211" width="48" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ApprovalRejected_Reject_di" bpmnElement="Flow_ApprovalRejected_Reject">
-        <di:waypoint x="1540" y="243" />
-        <di:waypoint x="1540" y="560" />
-        <di:waypoint x="1060" y="560" />
+        <di:waypoint x="1540" y="225" />
+        <di:waypoint x="1540" y="500" />
+        <di:waypoint x="1100" y="500" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1533" y="391" width="44" height="14" />
+          <dc:Bounds x="1533" y="353" width="44" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ApprovalMerge_Fork_di" bpmnElement="Flow_ApprovalMerge_Fork">
@@ -348,18 +394,18 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_InventoryError_Reject_di" bpmnElement="Flow_InventoryError_Reject">
         <di:waypoint x="498" y="336" />
-        <di:waypoint x="498" y="560" />
-        <di:waypoint x="930" y="560" />
+        <di:waypoint x="498" y="500" />
+        <di:waypoint x="970" y="500" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_PaymentDeclined_Reject_di" bpmnElement="Flow_PaymentDeclined_Reject">
         <di:waypoint x="696" y="336" />
-        <di:waypoint x="696" y="560" />
-        <di:waypoint x="930" y="560" />
+        <di:waypoint x="696" y="500" />
+        <di:waypoint x="970" y="500" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_Reject_End_di" bpmnElement="Flow_Reject_End">
-        <di:waypoint x="1060" y="560" />
-        <di:waypoint x="1114" y="560" />
-        <di:waypoint x="1114" y="650" />
+        <di:waypoint x="1100" y="500" />
+        <di:waypoint x="1134" y="500" />
+        <di:waypoint x="1134" y="650" />
         <di:waypoint x="1167" y="650" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>

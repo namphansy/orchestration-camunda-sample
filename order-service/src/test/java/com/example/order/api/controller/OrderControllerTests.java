@@ -3,6 +3,7 @@ package com.example.order.api.controller;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -51,6 +52,11 @@ class OrderControllerTests {
                                 """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.orderId").value("order-test-1"))
+                .andExpect(jsonPath("$.status").value("PROCESSING"))
+                .andExpect(jsonPath("$.workflowProcessInstanceId").value("process-order-test-1"));
+
+        mockMvc.perform(get("/api/orders/{orderId}", "order-test-1"))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PROCESSING"))
                 .andExpect(jsonPath("$.workflowProcessInstanceId").value("process-order-test-1"));
     }

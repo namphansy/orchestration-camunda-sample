@@ -13,11 +13,15 @@ import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Scope;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class InventoryReservationService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(InventoryReservationService.class);
 
     private final Tracer tracer = GlobalOpenTelemetry.getTracer(InventoryReservationService.class.getName());
 
@@ -48,13 +52,29 @@ public class InventoryReservationService {
                 throw new IllegalArgumentException("Idempotency-Key header is required");
             }
 
-            InventoryReservationResponse response = reservationRepository.findByIdempotencyKey(idempotencyKey)
+            LOGGER.info("Inventory reservation requested. orderId={}, correlationId={}, sku={}, quantity={}, idempotencyKey={}",
+                    request.orderId(), request.correlationId(), request.sku(), request.quantity(), idempotencyKey);
+            InventoryReservationResponse existingResponse = reservationRepository.findByIdempotencyKey(idempotencyKey)
                     .map(InventoryReservationResponse::from)
-                    .orElseGet(() -> createReservation(request, idempotencyKey));
+                    .orElse(null);
+            if (existingResponse != null) {
+                LOGGER.info("Inventory reservation idempotency hit. orderId={}, correlationId={}, reservationId={}, status={}",
+                        request.orderId(), request.correlationId(), existingResponse.reservationId(), existingResponse.status());
+                span.setAttribute("inventory.reservation.id", existingResponse.reservationId());
+                span.setAttribute("inventory.status", existingResponse.status().name());
+                return existingResponse;
+            }
+
+            InventoryReservationResponse response = createReservation(request, idempotencyKey);
             span.setAttribute("inventory.reservation.id", response.reservationId());
             span.setAttribute("inventory.status", response.status().name());
+            LOGGER.info("Inventory reservation created. orderId={}, correlationId={}, reservationId={}, sku={}, quantity={}, status={}",
+                    request.orderId(), request.correlationId(), response.reservationId(), response.sku(),
+                    response.quantity(), response.status());
             return response;
         } catch (RuntimeException exception) {
+            LOGGER.error("Inventory reservation failed. orderId={}, correlationId={}, sku={}, quantity={}, message={}",
+                    request.orderId(), request.correlationId(), request.sku(), request.quantity(), exception.getMessage(), exception);
             span.recordException(exception);
             span.setStatus(StatusCode.ERROR, exception.getMessage());
             throw exception;
@@ -74,6 +94,8 @@ public class InventoryReservationService {
         StockItem stockItem = stockItemRepository.findById(request.sku())
                 .orElseThrow(() -> new InsufficientStockException(request.sku(), request.quantity(), 0));
         if (stockItem.getAvailableQuantity() < request.quantity()) {
+            LOGGER.warn("Insufficient stock. orderId={}, correlationId={}, sku={}, requestedQuantity={}, availableQuantity={}",
+                    request.orderId(), request.correlationId(), request.sku(), request.quantity(), stockItem.getAvailableQuantity());
             throw new InsufficientStockException(request.sku(), request.quantity(), stockItem.getAvailableQuantity());
         }
 

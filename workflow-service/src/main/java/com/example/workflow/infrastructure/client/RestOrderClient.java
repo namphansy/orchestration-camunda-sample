@@ -1,6 +1,8 @@
 package com.example.workflow.infrastructure.client;
 
 import java.time.Duration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.stereotype.Component;
@@ -8,6 +10,8 @@ import org.springframework.web.client.RestTemplate;
 
 @Component
 public class RestOrderClient implements OrderClient {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(RestOrderClient.class);
 
     private final RestTemplate restTemplate;
     private final String orderBaseUrl;
@@ -25,10 +29,16 @@ public class RestOrderClient implements OrderClient {
 
     @Override
     public OrderDetailsResponse getOrder(String orderId) {
-        return restTemplate.getForObject(
+        LOGGER.info("Fetching order details from order-service. orderId={}", orderId);
+        OrderDetailsResponse response = restTemplate.getForObject(
                 orderBaseUrl + "/api/orders/{orderId}",
                 OrderDetailsResponse.class,
                 orderId
         );
+        if (response != null) {
+            LOGGER.info("Fetched order details from order-service. orderId={}, correlationId={}, status={}",
+                    orderId, response.correlationId(), response.status());
+        }
+        return response;
     }
 }

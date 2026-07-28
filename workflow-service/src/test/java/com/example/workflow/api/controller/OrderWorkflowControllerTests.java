@@ -164,6 +164,9 @@ class OrderWorkflowControllerTests {
                 .activityId("ChargePayment")
                 .singleResult();
         managementService.executeJob(paymentJob.getId());
+        confirmPaymentThroughRest(businessKey, correlationId, "payment-" + businessKey, "CHARGED")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CORRELATED"));
         Task approvalTask = taskService.createTaskQuery()
                 .processInstanceId(processInstance.getProcessInstanceId())
                 .taskDefinitionKey("ManagerApprovalTask")
@@ -195,5 +198,114 @@ class OrderWorkflowControllerTests {
                                 }
                                 """))
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void confirmsPaymentThroughRestAndSafelyIgnoresDuplicatesOrUnknownMessages() throws Exception {
+        String businessKey = "order-rest-test-payment-confirmation";
+        String correlationId = "correlation-rest-test-payment-confirmation";
+        when(inventoryClient.reserveInventory(any(), eq("inventory-reservation:" + businessKey)))
+                .thenReturn(new InventoryClient.InventoryReservationResponse(
+                        "reservation-" + businessKey,
+                        businessKey,
+                        "SKU-DEFAULT",
+                        1,
+                        "RESERVED",
+                        correlationId
+                ));
+        when(orderClient.getOrder(businessKey))
+                .thenReturn(new OrderClient.OrderDetailsResponse(
+                        businessKey,
+                        "customer-rest-1",
+                        new BigDecimal("120.50"),
+                        "USD",
+                        "SKU-DEFAULT",
+                        1,
+                        "PROCESSING",
+                        correlationId
+                ));
+        when(paymentClient.chargePayment(any(), eq("payment-charge:" + businessKey)))
+                .thenReturn(new PaymentClient.PaymentChargeResponse(
+                        "payment-" + businessKey,
+                        businessKey,
+                        new BigDecimal("120.50"),
+                        "USD",
+                        "CHARGED",
+                        correlationId,
+                        null
+                ));
+        when(invoiceClient.generateInvoice(any(), eq("invoice-generation:" + businessKey)))
+                .thenReturn(new InvoiceClient.InvoiceResponse(
+                        "invoice-" + businessKey,
+                        businessKey,
+                        new BigDecimal("120.50"),
+                        "USD",
+                        "GENERATED",
+                        correlationId
+                ));
+        when(notificationClient.publishNotification(any()))
+                .thenReturn(new NotificationClient.NotificationResponse(
+                        "notification-" + businessKey,
+                        businessKey,
+                        "PUBLISHED",
+                        correlationId
+                ));
+
+        ProcessInstance processInstance = runtimeService.startProcessInstanceByKey(
+                "order-processing",
+                businessKey,
+                Map.of(
+                        ProcessVariables.ORDER_ID, businessKey,
+                        ProcessVariables.BUSINESS_KEY, businessKey,
+                        ProcessVariables.CORRELATION_ID, correlationId,
+                        ProcessVariables.ORDER_STATUS, "CREATED"
+                )
+        );
+        managementService.executeJob(managementService.createJobQuery()
+                .processInstanceId(processInstance.getProcessInstanceId())
+                .activityId("ChargePayment")
+                .singleResult()
+                .getId());
+
+        confirmPaymentThroughRest(businessKey, "wrong-correlation", "payment-" + businessKey, "CHARGED")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("IGNORED"));
+
+        confirmPaymentThroughRest(businessKey, correlationId, "payment-" + businessKey, "CHARGED")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CORRELATED"));
+
+        confirmPaymentThroughRest(businessKey, correlationId, "payment-" + businessKey, "CHARGED")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("IGNORED"));
+
+        mockMvc.perform(post("/api/workflows/orders/unknown-order/payment-confirmations")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "correlationId": "missing-correlation",
+                                  "paymentTransactionId": "missing-payment",
+                                  "paymentStatus": "CHARGED"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("IGNORED"));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions confirmPaymentThroughRest(
+            String businessKey,
+            String correlationId,
+            String paymentTransactionId,
+            String paymentStatus
+    ) throws Exception {
+        return mockMvc.perform(post("/api/workflows/orders/{businessKey}/payment-confirmations", businessKey)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "correlationId": "%s",
+                          "paymentTransactionId": "%s",
+                          "paymentStatus": "%s"
+                        }
+                        """.formatted(correlationId, paymentTransactionId, paymentStatus)));
     }
 }

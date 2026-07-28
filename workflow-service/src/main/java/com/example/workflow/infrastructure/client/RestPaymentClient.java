@@ -1,6 +1,8 @@
 package com.example.workflow.infrastructure.client;
 
 import java.time.Duration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.HttpEntity;
@@ -12,6 +14,8 @@ import org.springframework.web.client.RestTemplate;
 
 @Component
 public class RestPaymentClient implements PaymentClient {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(RestPaymentClient.class);
 
     private final RestTemplate restTemplate;
     private final String paymentBaseUrl;
@@ -31,6 +35,8 @@ public class RestPaymentClient implements PaymentClient {
     public PaymentChargeResponse chargePayment(PaymentChargeRequest request, String idempotencyKey) {
         HttpHeaders headers = new HttpHeaders();
         headers.set("Idempotency-Key", idempotencyKey);
+        LOGGER.info("Calling payment-service charge. orderId={}, correlationId={}, amount={}, currency={}, idempotencyKey={}",
+                request.orderId(), request.correlationId(), request.amount(), request.currency(), idempotencyKey);
         ResponseEntity<PaymentChargeResponse> response = restTemplate.exchange(
                 paymentBaseUrl + "/api/payments/charges",
                 HttpMethod.POST,
@@ -39,7 +45,13 @@ public class RestPaymentClient implements PaymentClient {
         );
         PaymentChargeResponse chargeResponse = response.getBody();
         if (chargeResponse != null && "DECLINED".equals(chargeResponse.status())) {
+            LOGGER.warn("payment-service declined charge. orderId={}, correlationId={}, transactionId={}, reason={}",
+                    request.orderId(), request.correlationId(), chargeResponse.transactionId(), chargeResponse.failureReason());
             throw new PaymentDeclinedException(chargeResponse.failureReason());
+        }
+        if (chargeResponse != null) {
+            LOGGER.info("payment-service charge completed. orderId={}, correlationId={}, transactionId={}, status={}",
+                    request.orderId(), request.correlationId(), chargeResponse.transactionId(), chargeResponse.status());
         }
         return chargeResponse;
     }

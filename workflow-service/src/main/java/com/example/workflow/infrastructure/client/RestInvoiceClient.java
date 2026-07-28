@@ -1,6 +1,8 @@
 package com.example.workflow.infrastructure.client;
 
 import java.time.Duration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.HttpEntity;
@@ -12,6 +14,8 @@ import org.springframework.web.client.RestTemplate;
 
 @Component
 public class RestInvoiceClient implements InvoiceClient {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(RestInvoiceClient.class);
 
     private final RestTemplate restTemplate;
     private final String invoiceBaseUrl;
@@ -31,12 +35,19 @@ public class RestInvoiceClient implements InvoiceClient {
     public InvoiceResponse generateInvoice(GenerateInvoiceRequest request, String idempotencyKey) {
         HttpHeaders headers = new HttpHeaders();
         headers.set("Idempotency-Key", idempotencyKey);
+        LOGGER.info("Calling invoice-service generation. orderId={}, correlationId={}, amount={}, currency={}, idempotencyKey={}",
+                request.orderId(), request.correlationId(), request.amount(), request.currency(), idempotencyKey);
         ResponseEntity<InvoiceResponse> response = restTemplate.exchange(
                 invoiceBaseUrl + "/api/invoices",
                 HttpMethod.POST,
                 new HttpEntity<>(request, headers),
                 InvoiceResponse.class
         );
-        return response.getBody();
+        InvoiceResponse body = response.getBody();
+        if (body != null) {
+            LOGGER.info("invoice-service generation completed. orderId={}, correlationId={}, invoiceId={}, status={}",
+                    request.orderId(), request.correlationId(), body.invoiceId(), body.status());
+        }
+        return body;
     }
 }

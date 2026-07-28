@@ -12,6 +12,8 @@ import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Scope;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +21,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @EnableConfigurationProperties(PaymentProperties.class)
 public class PaymentService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(PaymentService.class);
 
     private final Tracer tracer = GlobalOpenTelemetry.getTracer(PaymentService.class.getName());
 
@@ -46,10 +50,14 @@ public class PaymentService {
                 throw new IllegalArgumentException("Idempotency-Key header is required");
             }
 
+            LOGGER.info("Payment charge requested. orderId={}, correlationId={}, amount={}, currency={}, idempotencyKey={}",
+                    request.orderId(), request.correlationId(), request.amount(), request.currency(), idempotencyKey);
             PaymentTransactionResponse existingResponse = transactionRepository.findByIdempotencyKey(idempotencyKey)
                     .map(PaymentTransactionResponse::from)
                     .orElse(null);
             if (existingResponse != null) {
+                LOGGER.info("Payment charge idempotency hit. orderId={}, correlationId={}, transactionId={}, status={}",
+                        request.orderId(), request.correlationId(), existingResponse.transactionId(), existingResponse.status());
                 span.setAttribute("payment.transaction.id", existingResponse.transactionId());
                 span.setAttribute("payment.status", existingResponse.status().name());
                 return existingResponse;
@@ -61,8 +69,13 @@ public class PaymentService {
             PaymentTransactionResponse response = createTransaction(request, idempotencyKey);
             span.setAttribute("payment.transaction.id", response.transactionId());
             span.setAttribute("payment.status", response.status().name());
+            LOGGER.info("Payment transaction created. orderId={}, correlationId={}, transactionId={}, amount={}, currency={}, status={}",
+                    request.orderId(), request.correlationId(), response.transactionId(), response.amount(),
+                    response.currency(), response.status());
             return response;
         } catch (RuntimeException exception) {
+            LOGGER.error("Payment charge failed. orderId={}, correlationId={}, message={}",
+                    request.orderId(), request.correlationId(), exception.getMessage(), exception);
             span.recordException(exception);
             span.setStatus(StatusCode.ERROR, exception.getMessage());
             throw exception;
@@ -81,6 +94,10 @@ public class PaymentService {
     private PaymentTransactionResponse createTransaction(ChargePaymentRequest request, String idempotencyKey) {
         PaymentStatus status = shouldDecline(request) ? PaymentStatus.DECLINED : PaymentStatus.CHARGED;
         String failureReason = status == PaymentStatus.DECLINED ? "Payment declined by configured rule" : null;
+        if (status == PaymentStatus.DECLINED) {
+            LOGGER.warn("Payment transaction will be declined. orderId={}, correlationId={}, amount={}, currency={}, reason={}",
+                    request.orderId(), request.correlationId(), request.amount(), request.currency(), failureReason);
+        }
         PaymentTransaction transaction = new PaymentTransaction(
                 UUID.randomUUID().toString(),
                 request.orderId(),
@@ -102,6 +119,8 @@ public class PaymentService {
     private void simulateTechnicalFailure(ChargePaymentRequest request) {
         if (request.simulation() == PaymentSimulation.TECHNICAL_FAILURE
                 || paymentProperties.technicalFailureOrderIds().contains(request.orderId())) {
+            LOGGER.warn("Simulating payment technical failure. orderId={}, correlationId={}",
+                    request.orderId(), request.correlationId());
             throw new IllegalStateException("Simulated payment processor outage");
         }
     }

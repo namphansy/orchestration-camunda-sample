@@ -1,7 +1,9 @@
 package com.example.workflow.application.service;
 
 import com.example.workflow.api.request.StartOrderWorkflowRequest;
+import com.example.workflow.api.request.ConfirmPaymentRequest;
 import com.example.workflow.api.response.OrderWorkflowResponse;
+import com.example.workflow.api.response.PaymentConfirmationResponse;
 import com.example.workflow.shared.ProcessVariables;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.trace.Span;
@@ -12,16 +14,22 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import org.camunda.bpm.engine.HistoryService;
+import org.camunda.bpm.engine.MismatchingMessageCorrelationException;
 import org.camunda.bpm.engine.RuntimeService;
 import org.camunda.bpm.engine.history.HistoricProcessInstance;
 import org.camunda.bpm.engine.history.HistoricVariableInstance;
 import org.camunda.bpm.engine.runtime.ProcessInstance;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class OrderWorkflowService {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(OrderWorkflowService.class);
+
     public static final String PROCESS_DEFINITION_KEY = "order-processing";
+    public static final String PAYMENT_CONFIRMATION_MESSAGE = "PaymentConfirmationReceived";
 
     private final Tracer tracer = GlobalOpenTelemetry.getTracer(OrderWorkflowService.class.getName());
 
@@ -43,6 +51,8 @@ public class OrderWorkflowService {
             span.setAttribute("camunda.process_definition.key", PROCESS_DEFINITION_KEY);
             span.setAttribute("camunda.business_key", businessKey);
 
+            LOGGER.info("Starting Camunda order workflow. businessKey={}, correlationId={}",
+                    businessKey, correlationId);
             Map<String, Object> variables = new HashMap<>();
             variables.put(ProcessVariables.ORDER_ID, request.orderId());
             variables.put(ProcessVariables.BUSINESS_KEY, businessKey);
@@ -58,8 +68,12 @@ public class OrderWorkflowService {
             span.setAttribute("camunda.process_instance.id", processInstance.getProcessInstanceId());
             String status = isActive(processInstance.getProcessInstanceId()) ? "ACTIVE" : "COMPLETED";
             span.setAttribute("workflow.status", status);
+            LOGGER.info("Camunda order workflow started. businessKey={}, correlationId={}, processInstanceId={}, status={}",
+                    businessKey, correlationId, processInstance.getProcessInstanceId(), status);
             return new OrderWorkflowResponse(processInstance.getProcessInstanceId(), businessKey, correlationId, status);
         } catch (RuntimeException exception) {
+            LOGGER.error("Failed to start Camunda order workflow. orderId={}, message={}",
+                    request.orderId(), exception.getMessage(), exception);
             span.recordException(exception);
             span.setStatus(StatusCode.ERROR, exception.getMessage());
             throw exception;
@@ -92,6 +106,33 @@ public class OrderWorkflowService {
                 getHistoricVariable(historicInstance.getId(), ProcessVariables.CORRELATION_ID),
                 historicInstance.getEndTime() == null ? "ACTIVE" : "COMPLETED"
         );
+    }
+
+    public PaymentConfirmationResponse confirmPayment(String businessKey, ConfirmPaymentRequest request) {
+        LOGGER.info("Received payment confirmation. businessKey={}, correlationId={}, paymentTransactionId={}, paymentStatus={}",
+                businessKey, request.correlationId(), request.paymentTransactionId(), request.paymentStatus());
+        Map<String, Object> variables = new HashMap<>();
+        variables.put(ProcessVariables.PAYMENT_TRANSACTION_ID, request.paymentTransactionId());
+        variables.put(ProcessVariables.PAYMENT_STATUS, request.paymentStatus());
+        variables.put(ProcessVariables.PAYMENT_CONFIRMED, true);
+        if (request.failureReason() != null && !request.failureReason().isBlank()) {
+            variables.put(ProcessVariables.FAILURE_REASON, request.failureReason());
+        }
+
+        try {
+            runtimeService.createMessageCorrelation(PAYMENT_CONFIRMATION_MESSAGE)
+                    .processInstanceBusinessKey(businessKey)
+                    .processInstanceVariableEquals(ProcessVariables.CORRELATION_ID, request.correlationId())
+                    .setVariables(variables)
+                    .correlateWithResult();
+            LOGGER.info("Payment confirmation correlated. businessKey={}, correlationId={}, paymentTransactionId={}, paymentStatus={}",
+                    businessKey, request.correlationId(), request.paymentTransactionId(), request.paymentStatus());
+            return new PaymentConfirmationResponse(businessKey, request.correlationId(), "CORRELATED");
+        } catch (MismatchingMessageCorrelationException exception) {
+            LOGGER.warn("Payment confirmation ignored. businessKey={}, correlationId={}, paymentTransactionId={}, reason={}",
+                    businessKey, request.correlationId(), request.paymentTransactionId(), exception.getMessage());
+            return new PaymentConfirmationResponse(businessKey, request.correlationId(), "IGNORED");
+        }
     }
 
     private boolean isActive(String processInstanceId) {
