@@ -398,6 +398,7 @@ The workflow-service tests also verify:
 - Manager and director user task creation with candidate groups.
 - Approved orders continuing to invoice and notification work.
 - Rejected approval tasks following the order rejection path.
+- Approval user tasks have interrupting timer timeouts that trigger compensation when no manual decision is completed.
 - Approval task list, claim, and complete REST APIs.
 - Parallel invoice generation and notification publishing before process completion.
 - Notification publishing failure is captured without rolling back invoice generation or blocking order completion.
@@ -460,6 +461,14 @@ Approval routing is configured in `workflow-service/src/main/resources/processes
 | `5000` through `49999.99` | `MANAGER` |
 | `>= 50000` | `DIRECTOR` |
 
+
+Approval user task timeout:
+
+```text
+PT10M
+```
+
+When an order requires `MANAGER` or `DIRECTOR` approval, the process waits at the user task for up to ten minutes. During that window, complete the task through the approval API with `approved: true` or `approved: false`. If the timer fires first, the user task is interrupted, `approved` is set to `false`, `failureReason` is set to an approval-timeout message, and the workflow continues through compensation and rejection.
 ## Learning Roadmap
 
 See [docs/learning-roadmap.md](docs/learning-roadmap.md).

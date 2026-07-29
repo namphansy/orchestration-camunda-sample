@@ -288,6 +288,69 @@ class OrderWorkflowProcessTests {
     }
 
     @Test
+    void managerApprovalTimeoutTriggersCompensationAndRejectsOrder() {
+        String businessKey = "order-process-test-approval-timeout";
+        String correlationId = "correlation-process-test-approval-timeout";
+        stubInventoryReserved(businessKey, correlationId);
+        stubOrder(businessKey, new BigDecimal("6000.00"), 1, correlationId);
+        stubPaymentCharged(businessKey, new BigDecimal("6000.00"), correlationId);
+        when(paymentClient.refundPayment("payment-" + businessKey, "payment-refund:" + businessKey))
+                .thenReturn(new PaymentClient.PaymentChargeResponse(
+                        "payment-" + businessKey,
+                        businessKey,
+                        new BigDecimal("6000.00"),
+                        "USD",
+                        "REFUNDED",
+                        correlationId,
+                        null
+                ));
+        when(inventoryClient.releaseInventory("reservation-" + businessKey, "inventory-release:" + businessKey))
+                .thenReturn(new InventoryClient.InventoryReservationResponse(
+                        "reservation-" + businessKey,
+                        businessKey,
+                        "SKU-DEFAULT",
+                        1,
+                        "RELEASED",
+                        correlationId
+                ));
+
+        ProcessInstance processInstance = startOrderProcess(businessKey, correlationId);
+
+        executeSinglePaymentJob(processInstance);
+        confirmPayment(processInstance, businessKey, correlationId, "payment-" + businessKey, "CHARGED");
+        assertThat(singleApprovalTask(processInstance, "ManagerApprovalTask")).isNotNull();
+
+        Job timeoutJob = singleApprovalTimeoutTimerJob(processInstance, "ManagerApprovalTimeoutBoundary");
+        assertThat(timeoutJob).isNotNull();
+        managementService.executeJob(timeoutJob.getId());
+
+        assertThat(runtimeService.createProcessInstanceQuery()
+                .processInstanceId(processInstance.getProcessInstanceId())
+                .singleResult()).isNull();
+        assertHistoricVariable(processInstance, ProcessVariables.ORDER_STATUS, "REJECTED");
+        assertHistoricVariable(processInstance, ProcessVariables.APPROVED, false);
+        assertHistoricVariable(processInstance, ProcessVariables.FAILURE_REASON, "Approval timed out for level MANAGER");
+        assertHistoricVariable(processInstance, ProcessVariables.PAYMENT_STATUS, "REFUNDED");
+        assertHistoricVariable(processInstance, ProcessVariables.INVENTORY_STATUS, "RELEASED");
+    }
+
+    @Test
+    void directorApprovalCreatesTimeoutJob() {
+        String businessKey = "order-process-test-director-approval-timeout-job";
+        String correlationId = "correlation-process-test-director-approval-timeout-job";
+        stubInventoryReserved(businessKey, correlationId);
+        stubOrder(businessKey, new BigDecimal("50000.00"), 1, correlationId);
+        stubPaymentCharged(businessKey, new BigDecimal("50000.00"), correlationId);
+
+        ProcessInstance processInstance = startOrderProcess(businessKey, correlationId);
+
+        executeSinglePaymentJob(processInstance);
+        confirmPayment(processInstance, businessKey, correlationId, "payment-" + businessKey, "CHARGED");
+
+        assertThat(singleApprovalTask(processInstance, "DirectorApprovalTask")).isNotNull();
+        assertThat(singleApprovalTimeoutTimerJob(processInstance, "DirectorApprovalTimeoutBoundary")).isNotNull();
+    }
+    @Test
     void rejectedApprovalTriggersOrderCancellationPath() {
         String businessKey = "order-process-test-approval-rejected";
         String correlationId = "correlation-process-test-approval-rejected";
@@ -863,6 +926,18 @@ class OrderWorkflowProcessTests {
                 .orElse(null);
     }
 
+    private Job singleApprovalTimeoutTimerJob(ProcessInstance processInstance, String activityId) {
+        return managementService.createJobQuery()
+                .activityId(activityId)
+                .list()
+                .stream()
+                .filter(job -> processInstance.getBusinessKey().equals(runtimeService.getVariable(
+                        job.getProcessInstanceId(),
+                        ProcessVariables.BUSINESS_KEY
+                )))
+                .findFirst()
+                .orElse(null);
+    }
     private Task singleApprovalTask(ProcessInstance processInstance, String taskDefinitionKey) {
         return taskService.createTaskQuery()
                 .processInstanceId(processInstance.getProcessInstanceId())

@@ -166,6 +166,7 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="DetermineApprovalRequirement_di" bpmnElement="DetermineApprovalRequirement">
         <dc:Bounds x="900" y="238" width="150" height="80" />
+        <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="ApprovalGateway_di" bpmnElement="ApprovalGateway" isMarkerVisible="true">
         <dc:Bounds x="1110" y="253" width="50" height="50" />
@@ -290,9 +291,9 @@
         <di:waypoint x="1435" y="253" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_DirectorApproval_Decision_di" bpmnElement="Flow_DirectorApproval_Decision">
-        <di:waypoint x="1350" y="375" />
-        <di:waypoint x="1435" y="375" />
-        <di:waypoint x="1435" y="303" />
+        <di:waypoint x="1285" y="335" />
+        <di:waypoint x="1285" y="278" />
+        <di:waypoint x="1410" y="278" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ApprovalAccepted_Merge_di" bpmnElement="Flow_ApprovalAccepted_Merge">
         <di:waypoint x="1460" y="278" />
