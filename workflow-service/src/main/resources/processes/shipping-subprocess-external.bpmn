@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_ShippingSubprocessExternal"
+                  targetNamespace="http://example.com/workflow/shipping/external">
+  <bpmn:error id="Error_ShipmentFailed" name="Shipment Failed" errorCode="SHIPMENT_FAILED" />
+
+  <bpmn:process id="shipping-subprocess-external" name="Shipping Subprocess External Tasks" isExecutable="true">
+    <bpmn:startEvent id="StartShippingExternal" name="Start Shipping">
+      <bpmn:outgoing>Flow_Start_CreateShipmentExternal</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="CreateShipmentExternal" name="Create Shipment" camunda:type="external" camunda:topic="create-shipment">
+      <bpmn:incoming>Flow_Start_CreateShipmentExternal</bpmn:incoming>
+      <bpmn:outgoing>Flow_CreateShipment_EndExternal</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="ShippingCompletedExternal" name="Shipping Completed">
+      <bpmn:incoming>Flow_CreateShipment_EndExternal</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="Flow_Start_CreateShipmentExternal" sourceRef="StartShippingExternal" targetRef="CreateShipmentExternal" />
+    <bpmn:sequenceFlow id="Flow_CreateShipment_EndExternal" sourceRef="CreateShipmentExternal" targetRef="ShippingCompletedExternal" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_ShippingSubprocessExternal">
+    <bpmndi:BPMNPlane id="BPMNPlane_ShippingSubprocessExternal" bpmnElement="shipping-subprocess-external">
+      <bpmndi:BPMNShape id="StartShippingExternal_di" bpmnElement="StartShippingExternal">
+        <dc:Bounds x="160" y="160" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="CreateShipmentExternal_di" bpmnElement="CreateShipmentExternal">
+        <dc:Bounds x="250" y="138" width="140" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ShippingCompletedExternal_di" bpmnElement="ShippingCompletedExternal">
+        <dc:Bounds x="450" y="160" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Start_CreateShipmentExternal_di" bpmnElement="Flow_Start_CreateShipmentExternal">
+        <di:waypoint x="196" y="178" />
+        <di:waypoint x="250" y="178" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_CreateShipment_EndExternal_di" bpmnElement="Flow_CreateShipment_EndExternal">
+        <di:waypoint x="390" y="178" />
+        <di:waypoint x="450" y="178" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

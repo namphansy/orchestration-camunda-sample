@@ -2,7 +2,7 @@
 
 Production-oriented learning project for demonstrating how Camunda 7 can orchestrate an order-processing workflow across Spring Boot microservices.
 
-## Phase 5 Status
+## Phase 9 Status
 
 This repository currently contains the bootstrap skeleton, a Camunda 7 workflow, and real Order, Inventory, Payment, Invoice, and Notification service integrations.
 
@@ -10,7 +10,9 @@ Implemented:
 
 - Embedded Camunda 7 process engine in `workflow-service`.
 - Camunda web applications for local Cockpit and Tasklist access.
-- `order-processing.bpmn` with inventory reservation, payment charging, a payment-result exclusive gateway, DMN-driven approval routing, manager/director user tasks, parallel invoice/notification work, modeled business-error paths, and Camunda retry configuration.
+- `order-processing.bpmn` with inventory reservation, payment charging, shipping, a payment-result exclusive gateway, DMN-driven approval routing, manager/director user tasks, invoice/notification work, modeled business-error paths, compensation, and Camunda retry configuration.
+- Parallel External Task workflow definitions: `order-processing-external`, `payment-subprocess-external`, and `shipping-subprocess-external`.
+- `external-task-worker`, an independently deployable Spring Boot 3.3.7 worker that subscribes to inventory, payment, and shipment topics over Camunda REST.
 - `order-approval.dmn` decision table that maps order amount to `NONE`, `MANAGER`, or `DIRECTOR` approval levels.
 - REST API to start and query an order workflow, plus list, claim, and complete approval tasks.
 - `order-service` persistence and order creation/query API.
@@ -19,12 +21,11 @@ Implemented:
 - `invoice-service` invoice persistence, generation/query API, and idempotent duplicate handling.
 - `notification-service` publishing API skeleton with configurable failure simulation.
 - REST integration from `workflow-service` to `order-service`, `inventory-service`, `payment-service`, `invoice-service`, and `notification-service`.
-- Tests proving process and DMN deployment, process completion after both parallel branches, insufficient-stock rejection, payment decline rejection, payment technical retries, incident generation after retry exhaustion, DMN approval routing, approval/rejection paths, approval task REST APIs, notification failure isolation, REST workflow start, order creation, inventory idempotency, payment idempotency, invoice idempotency, notification publishing, and Spring context startup.
+- Tests proving process and DMN deployment, process completion, insufficient-stock rejection, payment decline rejection, payment technical retries, incident generation after retry exhaustion, DMN approval routing, approval/rejection paths, approval task REST APIs, notification failure isolation, external task deployment/locking/failure details, worker handler completion/BPMN-error/retry behavior, REST workflow start, order creation, inventory idempotency, payment idempotency, invoice idempotency, notification publishing, and Spring context startup.
 
 Not implemented yet:
 
-- Shipping integration.
-- Timers, messages, compensation, or external tasks.
+- RabbitMQ integration.
 
 ## Architecture Overview
 
@@ -33,6 +34,7 @@ The repository is a Maven multi-module project with one module per service:
 | Module | Responsibility |
 | --- | --- |
 | `workflow-service` | Camunda 7 process engine host and workflow API. |
+| `external-task-worker` | Independently deployable Camunda External Task worker for inventory, payment, and shipment topics. |
 | `order-service` | Owns persisted orders and starts order workflows. |
 | `inventory-service` | Owns stock and idempotent inventory reservations. |
 | `payment-service` | Owns idempotent payment charge transactions and payment failure simulation. |
@@ -41,7 +43,7 @@ The repository is a Maven multi-module project with one module per service:
 | `notification-service` | Provides a notification publishing API skeleton. |
 | `integration-tests` | Future cross-service and Testcontainers scenarios. |
 
-`order-service` starts workflows. `workflow-service` uses `orderId` to query order details from `order-service` when a delegate needs business data, then calls `inventory-service` to reserve stock and `payment-service` to charge the order. Paid orders pass through an exclusive gateway, evaluate `order-approval.dmn`, optionally wait at a manager or director approval user task, then fan out through parallel invoice and notification branches, join after both branches complete, and complete the order. Rejected approvals follow the modeled reject path.
+`order-service` starts workflows. The default `order-processing` path uses embedded JavaDelegates in `workflow-service`. The Phase 9 external-task branch uses `order-processing-external` and leaves inventory reservation, payment charging, and shipment creation for `external-task-worker` to fetch, lock, complete, retry, or fail over Camunda REST. Paid orders pass through an exclusive gateway, evaluate `order-approval.dmn`, optionally wait at a manager or director approval user task, then generate invoice/notification work and complete the order. Rejected approvals follow the modeled compensation and rejection path.
 
 ## Technology Stack
 
@@ -72,7 +74,8 @@ docker compose up -d
 
 This starts PostgreSQL, Jaeger, OpenTelemetry Collector, and all runtime services:
 `workflow-service`, `order-service`, `inventory-service`, `payment-service`,
-`shipping-service`, `invoice-service`, and `notification-service`.
+`shipping-service`, `invoice-service`, `notification-service`, and
+`external-task-worker`.
 
 Stop the Docker stack:
 
@@ -153,6 +156,7 @@ Default ports:
 | `shipping-service` | 8084 |
 | `invoice-service` | 8085 |
 | `notification-service` | 8086 |
+| `external-task-worker` | 8087 |
 
 ## OpenTelemetry and Tracing
 
@@ -397,6 +401,10 @@ The workflow-service tests also verify:
 - Approval task list, claim, and complete REST APIs.
 - Parallel invoice generation and notification publishing before process completion.
 - Notification publishing failure is captured without rolling back invoice generation or blocking order completion.
+- External task process definitions deploy.
+- External inventory tasks can be fetched and locked by a worker.
+- External task failures preserve workflow state and store error message/details for Cockpit.
+- Worker handlers complete successful tasks, raise BPMN errors for business failures, and report retryable failures with details.
 
 The order-service, inventory-service, payment-service, invoice-service, and notification-service tests also verify:
 
@@ -456,12 +464,30 @@ Approval routing is configured in `workflow-service/src/main/resources/processes
 
 See [docs/learning-roadmap.md](docs/learning-roadmap.md).
 
+## External Tasks
+
+The default API still starts `order-processing`. Phase 9 adds a second implementation branch for learning and comparison:
+
+```text
+order-processing-external
+  reserve-inventory -> topic reserve-inventory
+  payment-subprocess-external -> topic charge-payment
+  shipping-subprocess-external -> topic create-shipment
+```
+
+Run the worker locally after `workflow-service` is available:
+
+```bash
+./mvnw -pl external-task-worker spring-boot:run
+```
+
+Stop or restart `external-task-worker` independently to observe that locked tasks remain in Camunda and are retried after the lock expires. Technical failures are reported with retry counts and stack details so Cockpit can show the failure information.
+
 ## Known Limitations
 
 - The payment task is asynchronous so Camunda can retry technical failures and create incidents.
-- Inventory and payment business errors are modeled; shipping errors, timers, messages, and compensation are not modeled yet.
-- Approval rejection uses the current reject-order path; inventory release and payment refund compensation are scheduled for the shipping and Saga compensation phase.
-- Notification publishing is intentionally non-critical in Phase 5; failures are recorded in process variables and the workflow continues after the parallel join.
+- External-task workflow start is currently available through Camunda REST/API by process key; the public order workflow REST endpoint preserves the default `order-processing` behavior.
+- Notification publishing is intentionally non-critical; failures are recorded in process variables and the workflow continues.
 - Runtime services use PostgreSQL by default; Maven tests use the `test` profile with in-memory H2 databases.
 - Docker Compose starts PostgreSQL for the workflow engine and persisted business services.
 - Authentication and authorization are only development-level Camunda webapp credentials.
