@@ -142,6 +142,8 @@ public class PaymentService {
     }
 
     private boolean shouldDecline(ChargePaymentRequest request) {
+        LOGGER.info("shouldDecline check. orderId={}, correlationId={}, amount={}, currency={}, simulation={}",
+                request.orderId(), request.correlationId(), request.amount(), request.currency(), request.simulation());
         return request.simulation() == PaymentSimulation.DECLINE
                 || request.amount().compareTo(paymentProperties.declineAbove()) > 0;
     }

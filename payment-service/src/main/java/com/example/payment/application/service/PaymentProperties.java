@@ -16,7 +16,7 @@ public record PaymentProperties(
             processingDelay = Duration.ZERO;
         }
         if (declineAbove == null) {
-            declineAbove = new BigDecimal("10000.00");
+            declineAbove = new BigDecimal("1000.00");
         }
         if (technicalFailureOrderIds == null) {
             technicalFailureOrderIds = List.of();

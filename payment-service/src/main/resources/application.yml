@@ -18,7 +18,7 @@ server:
 
 payment:
   processing-delay: 0ms
-  decline-above: 10000.00
+  decline-above: 100000.00
   technical-failure-order-ids: []
 
 management:
