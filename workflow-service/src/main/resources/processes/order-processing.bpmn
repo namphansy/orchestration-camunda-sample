@@ -198,6 +198,7 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="NotificationCallActivity_di" bpmnElement="NotificationCallActivity">
         <dc:Bounds x="1815" y="238" width="155" height="80" />
+        <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="CompleteOrder_di" bpmnElement="CompleteOrder">
         <dc:Bounds x="2030" y="238" width="120" height="80" />
