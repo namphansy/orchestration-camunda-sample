@@ -27,6 +27,27 @@ public final class ProcessVariables {
     public static final String INVENTORY_RELEASE_STATUS = "inventoryReleaseStatus";
     public static final String FAILURE_REASON = "failureReason";
 
+    public static final String RETURN_ID = "returnId";
+    public static final String RETURN_REASON = "returnReason";
+    public static final String RETURN_STATUS = "returnStatus";
+    public static final String RETURN_SHIPMENT_ID = "returnShipmentId";
+
+    public static final String REFUND_TRANSACTION_ID = "refundTransactionId";
+
+    public static final String INSPECTION_ACCEPTED = "inspectionAccepted";
+
+    public static final String RECEIVED_BY = "receivedBy";
+    public static final String RECEIVED_AT = "receivedAt";
+    public static final String INSPECTOR = "inspector";
+
+    public static final String INSPECTION_COMMENT = "inspectionComment";
+
+    public static final String INSPECTION_ITEMS = "inspectionItems";
+
+    public static final String RESTOCK_STATUS = "restockStatus";
+
+    public static final String CUSTOMER_ID = "customerId";
+
     private ProcessVariables() {
     }
 }

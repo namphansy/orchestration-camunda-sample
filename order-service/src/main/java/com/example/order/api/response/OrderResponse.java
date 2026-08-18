@@ -3,6 +3,7 @@ package com.example.order.api.response;
 import com.example.order.domain.model.OrderEntity;
 import com.example.order.domain.model.OrderStatus;
 import java.math.BigDecimal;
+import java.time.Instant;
 
 public record OrderResponse(
         String orderId,
@@ -13,7 +14,8 @@ public record OrderResponse(
         Integer quantity,
         OrderStatus status,
         String correlationId,
-        String workflowProcessInstanceId
+        String workflowProcessInstanceId,
+        Instant deliveredAt
 ) {
     public static OrderResponse from(OrderEntity order) {
         return new OrderResponse(
@@ -25,7 +27,8 @@ public record OrderResponse(
                 order.getQuantity(),
                 order.getStatus(),
                 order.getCorrelationId(),
-                order.getWorkflowProcessInstanceId()
+                order.getWorkflowProcessInstanceId(),
+                order.getDeliveredAt()
         );
     }
 }

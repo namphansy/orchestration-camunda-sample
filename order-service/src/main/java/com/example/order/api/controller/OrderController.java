@@ -1,5 +1,6 @@
 package com.example.order.api.controller;
 
+import com.example.order.api.request.CompleteOrderDeliveryRequest;
 import com.example.order.api.request.CreateOrderRequest;
 import com.example.order.api.response.OrderResponse;
 import com.example.order.application.service.OrderService;
@@ -32,5 +33,13 @@ public class OrderController {
     @GetMapping("/{orderId}")
     public OrderResponse getOrder(@PathVariable("orderId") String orderId) {
         return orderService.getOrder(orderId);
+    }
+
+    @PostMapping("/{orderId}/delivery-completions")
+    public OrderResponse completeDelivery(
+            @PathVariable("orderId") String orderId,
+            @Valid @RequestBody CompleteOrderDeliveryRequest request
+    ) {
+        return orderService.completeDelivery(orderId, request);
     }
 }

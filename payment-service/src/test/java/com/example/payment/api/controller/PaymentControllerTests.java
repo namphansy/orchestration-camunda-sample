@@ -1,6 +1,7 @@
 package com.example.payment.api.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -146,5 +147,37 @@ class PaymentControllerTests {
         assertThat(transactionRepository.findAll())
                 .filteredOn(transaction -> transaction.getOrderId().equals("payment-order-test-4"))
                 .isEmpty();
+    }
+
+    @Test
+    void findsChargedTransactionByOrderId() throws Exception {
+        mockMvc.perform(post("/api/payments/charges")
+                        .header(
+                                "Idempotency-Key",
+                                "payment-test-key-order-lookup"
+                        )
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                "orderId": "payment-order-lookup",
+                                "amount": 45.00,
+                                "currency": "USD",
+                                "correlationId": "correlation-payment-order-lookup"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("CHARGED"));
+
+        mockMvc.perform(get(
+                        "/api/payments/transactions/by-order/{orderId}",
+                        "payment-order-lookup"
+                ))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.orderId")
+                        .value("payment-order-lookup"))
+                .andExpect(jsonPath("$.amount").value(45.00))
+                .andExpect(jsonPath("$.currency").value("USD"))
+                .andExpect(jsonPath("$.status").value("CHARGED"))
+                .andExpect(jsonPath("$.transactionId").isNotEmpty());
     }
 }

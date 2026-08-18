@@ -81,4 +81,23 @@ public class RestInventoryClient implements InventoryClient {
         }
         return body;
     }
+
+    @Override
+    public InventoryRestockResponse restockInventory(
+            InventoryRestockRequest request,
+            String idempotencyKey
+    ) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Idempotency-Key", idempotencyKey);
+
+        ResponseEntity<InventoryRestockResponse> response =
+                restTemplate.exchange(
+                        inventoryBaseUrl + "/api/inventory/restocks",
+                        HttpMethod.POST,
+                        new HttpEntity<>(request, headers),
+                        InventoryRestockResponse.class
+                );
+
+        return response.getBody();
+    }
 }
