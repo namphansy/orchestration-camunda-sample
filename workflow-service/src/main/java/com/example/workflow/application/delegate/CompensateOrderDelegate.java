@@ -5,19 +5,26 @@ import com.example.workflow.infrastructure.client.PaymentClient;
 import com.example.workflow.shared.ProcessVariables;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import org.camunda.bpm.engine.RuntimeService;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
 public class CompensateOrderDelegate implements JavaDelegate {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(CompensateOrderDelegate.class);
+
     private final PaymentClient paymentClient;
     private final InventoryClient inventoryClient;
+    private final RuntimeService runtimeService;
 
-    public CompensateOrderDelegate(PaymentClient paymentClient, InventoryClient inventoryClient) {
+    public CompensateOrderDelegate(PaymentClient paymentClient, InventoryClient inventoryClient, RuntimeService runtimeService) {
         this.paymentClient = paymentClient;
         this.inventoryClient = inventoryClient;
+        this.runtimeService = runtimeService;
     }
 
     @Override
@@ -37,10 +44,14 @@ public class CompensateOrderDelegate implements JavaDelegate {
         }
 
         Set<String> reservationIds = reservationIds(execution);
+        LOGGER.info("Compensating inventory reservations. businessKey={}, reservationIds={}", businessKey, reservationIds);
         for (String reservationId : reservationIds) {
+            String idempotencyKey = inventoryReleaseIdempotencyKey(execution, businessKey, reservationId, reservationIds.size());
+            LOGGER.info("Releasing inventory reservation. businessKey={}, reservationId={}, idempotencyKey={}",
+                    businessKey, reservationId, idempotencyKey);
             InventoryClient.InventoryReservationResponse release = inventoryClient.releaseInventory(
                     reservationId,
-                    inventoryReleaseIdempotencyKey(execution, businessKey, reservationId, reservationIds.size())
+                    idempotencyKey
             );
             if (release != null) {
                 execution.setVariable(ProcessVariables.INVENTORY_RELEASE_STATUS, release.status());
@@ -51,12 +62,12 @@ public class CompensateOrderDelegate implements JavaDelegate {
 
     private Set<String> reservationIds(DelegateExecution execution) {
         Set<String> reservationIds = new LinkedHashSet<>();
-        Object reservationId = execution.getVariable(ProcessVariables.INVENTORY_RESERVATION_ID);
+        Object reservationId = runtimeService.getVariable(execution.getProcessInstanceId(), ProcessVariables.INVENTORY_RESERVATION_ID);
         if (reservationId != null) {
             reservationIds.add(String.valueOf(reservationId));
         }
 
-        Object reservationIdList = execution.getVariable(ProcessVariables.INVENTORY_RESERVATION_IDS);
+        Object reservationIdList = runtimeService.getVariable(execution.getProcessInstanceId(), ProcessVariables.INVENTORY_RESERVATION_IDS);
         if (reservationIdList instanceof Iterable<?> values) {
             for (Object value : values) {
                 if (value != null) {
@@ -80,7 +91,7 @@ public class CompensateOrderDelegate implements JavaDelegate {
     }
 
     private boolean hasMultipleOrderLines(DelegateExecution execution) {
-        Object orderLines = execution.getVariable(ProcessVariables.ORDER_LINES);
+        Object orderLines = runtimeService.getVariable(execution.getProcessInstanceId(), ProcessVariables.ORDER_LINES);
         return orderLines instanceof Iterable<?> values && values.iterator().hasNext() && hasMoreThanOne(values);
     }
 

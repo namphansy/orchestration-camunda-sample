@@ -1,6 +1,7 @@
 package com.example.inventory.application.service;
 
 import com.example.inventory.api.request.ReserveInventoryRequest;
+import com.example.inventory.api.request.RestockInventoryRequest;
 import com.example.inventory.api.response.InventoryReservationResponse;
 import com.example.inventory.domain.exception.InsufficientStockException;
 import com.example.inventory.domain.model.InventoryReservation;
@@ -110,6 +111,15 @@ public class InventoryReservationService {
         LOGGER.info("Inventory reservation released. reservationId={}, orderId={}, sku={}, quantity={}, idempotencyKey={}",
                 reservationId, reservation.getOrderId(), reservation.getSku(), reservation.getQuantity(), idempotencyKey);
         return InventoryReservationResponse.from(reservation);
+    }
+
+    @Transactional
+    public void restock(RestockInventoryRequest request) {
+        StockItem stockItem = stockItemRepository.findById(request.sku())
+                .orElseThrow(() -> new IllegalArgumentException("Stock item not found: " + request.sku()));
+        stockItem.restock(request.quantity());
+        LOGGER.info("Inventory restocked. sku={}, quantity={}, correlationId={}",
+                request.sku(), request.quantity(), request.correlationId());
     }
 
     private InventoryReservationResponse createReservation(ReserveInventoryRequest request, String idempotencyKey) {

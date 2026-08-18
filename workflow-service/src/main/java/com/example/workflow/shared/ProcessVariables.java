@@ -26,6 +26,13 @@ public final class ProcessVariables {
     public static final String SHIPMENT_STATUS = "shipmentStatus";
     public static final String INVENTORY_RELEASE_STATUS = "inventoryReleaseStatus";
     public static final String FAILURE_REASON = "failureReason";
+    
+    // Backorder variables
+    public static final String BACKORDER_ID = "backorderId";
+    public static final String SKU = "sku";
+    public static final String QUANTITY = "quantity";
+    public static final String BACKORDER_STATUS = "backorderStatus";
+    public static final String RESTOCK_RECEIVED = "restockReceived";
 
     private ProcessVariables() {
     }

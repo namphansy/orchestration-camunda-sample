@@ -2,6 +2,7 @@ package com.example.workflow.api.controller;
 
 import com.example.workflow.application.service.OrderWorkflowNotFoundException;
 import com.example.workflow.application.service.ApprovalTaskNotFoundException;
+import com.example.workflow.application.service.BackorderWorkflowNotFoundException;
 import java.time.Instant;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -22,6 +23,12 @@ public class WorkflowExceptionHandler {
     @ResponseStatus(HttpStatus.NOT_FOUND)
     public Map<String, Object> handleApprovalTaskNotFound(ApprovalTaskNotFoundException exception) {
         return notFound("APPROVAL_TASK_NOT_FOUND", exception.getMessage());
+    }
+
+    @ExceptionHandler(BackorderWorkflowNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Map<String, Object> handleBackorderWorkflowNotFound(BackorderWorkflowNotFoundException exception) {
+        return notFound("BACKORDER_WORKFLOW_NOT_FOUND", exception.getMessage());
     }
 
     private Map<String, Object> notFound(String errorCode, String message) {
