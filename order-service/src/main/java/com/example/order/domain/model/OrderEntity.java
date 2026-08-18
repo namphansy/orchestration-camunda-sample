@@ -72,6 +72,11 @@ public class OrderEntity {
         this.updatedAt = Instant.now();
     }
 
+    public void updateStatus(OrderStatus status) {
+        this.status = status;
+        this.updatedAt = Instant.now();
+    }
+
     public String getOrderId() {
         return orderId;
     }

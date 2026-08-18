@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="Definitions_0l2b9am" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="5.49.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.24.0">
+  <bpmn:process id="fraud-review" name="Fraud Review" isExecutable="true">
+    <bpmn:startEvent id="StartFraudReview" name="Start Fraud Review">
+      <bpmn:outgoing>Flow_1ibfkv6</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_1ibfkv6" sourceRef="StartFraudReview" targetRef="EvaluateFraudRisk" />
+    <bpmn:businessRuleTask id="EvaluateFraudRisk" name="Evaluate Fraud Risk" camunda:resultVariable="riskLevel" camunda:decisionRef="fraud-risk" camunda:mapDecisionResult="singleEntry">
+      <bpmn:incoming>Flow_1ibfkv6</bpmn:incoming>
+      <bpmn:outgoing>Flow_12sn4nb</bpmn:outgoing>
+    </bpmn:businessRuleTask>
+    <bpmn:exclusiveGateway id="RiskLevelGateway" name="Risk Level?">
+      <bpmn:incoming>Flow_12sn4nb</bpmn:incoming>
+      <bpmn:outgoing>LOW</bpmn:outgoing>
+      <bpmn:outgoing>MEDIUM</bpmn:outgoing>
+      <bpmn:outgoing>HIGH</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="Flow_12sn4nb" sourceRef="EvaluateFraudRisk" targetRef="RiskLevelGateway" />
+    <bpmn:sequenceFlow id="LOW" name="LOW" sourceRef="RiskLevelGateway" targetRef="ApproveReview">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${riskLevel == 'LOW'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:serviceTask id="ApproveReview" name="Approve Review" camunda:delegateExpression="${approveReviewDelegate}">
+      <bpmn:incoming>LOW</bpmn:incoming>
+      <bpmn:outgoing>Approved</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="MEDIUM" name="MEDIUM" sourceRef="RiskLevelGateway" targetRef="FraudAnalystReview">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${riskLevel == 'MEDIUM'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:userTask id="FraudAnalystReview" name="Fraud Analyst Review" camunda:candidateGroups="fraud-analysts">
+      <bpmn:incoming>MEDIUM</bpmn:incoming>
+      <bpmn:outgoing>Flow_1c0sdcu</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="HIGH" name="HIGH" sourceRef="RiskLevelGateway" targetRef="FraudManagerReview">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${riskLevel == 'HIGH'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:userTask id="FraudManagerReview" name="Fraud Manager Review" camunda:candidateGroups="fraud-managers">
+      <bpmn:incoming>HIGH</bpmn:incoming>
+      <bpmn:outgoing>Flow_1tfxue5</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:boundaryEvent id="AnalystReviewTimer" attachedToRef="FraudAnalystReview">
+      <bpmn:outgoing>Flow_05k3mal</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerEventDefinition_0pr7wx7">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT15M</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="ManagerReviewTimer" attachedToRef="FraudManagerReview">
+      <bpmn:outgoing>Flow_057ci6f</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerEventDefinition_1sc0h1j">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT15M</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="MarkReviewTimedOut" name="Mark Review Timed Out" camunda:delegateExpression="${markFraudReviewTimedOutDelegate}">
+      <bpmn:incoming>Flow_05k3mal</bpmn:incoming>
+      <bpmn:incoming>Flow_057ci6f</bpmn:incoming>
+      <bpmn:outgoing>Flow_1reoyi8</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_05k3mal" sourceRef="AnalystReviewTimer" targetRef="MarkReviewTimedOut" />
+    <bpmn:sequenceFlow id="Flow_057ci6f" sourceRef="ManagerReviewTimer" targetRef="MarkReviewTimedOut" />
+    <bpmn:exclusiveGateway id="ReviewDecisionGateway" name="Approved?" default="Rejected">
+      <bpmn:incoming>Flow_1c0sdcu</bpmn:incoming>
+      <bpmn:incoming>Flow_1tfxue5</bpmn:incoming>
+      <bpmn:outgoing>Rejected</bpmn:outgoing>
+      <bpmn:outgoing>Flow_0um29k2</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="Flow_1c0sdcu" sourceRef="FraudAnalystReview" targetRef="ReviewDecisionGateway" />
+    <bpmn:sequenceFlow id="Flow_1tfxue5" sourceRef="FraudManagerReview" targetRef="ReviewDecisionGateway" />
+    <bpmn:endEvent id="ReviewApproved" name="Review Approved">
+      <bpmn:incoming>Approved</bpmn:incoming>
+      <bpmn:incoming>Flow_0um29k2</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Approved" name="Approved" sourceRef="ApproveReview" targetRef="ReviewApproved" />
+    <bpmn:endEvent id="ReviewRejected" name="Review Rejected">
+      <bpmn:incoming>Rejected</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Rejected" name="Rejected" sourceRef="ReviewDecisionGateway" targetRef="ReviewRejected" />
+    <bpmn:endEvent id="ReviewTimedOut" name="Review Timed Out">
+      <bpmn:incoming>Flow_1reoyi8</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_1reoyi8" sourceRef="MarkReviewTimedOut" targetRef="ReviewTimedOut" />
+    <bpmn:sequenceFlow id="Flow_0um29k2" sourceRef="ReviewDecisionGateway" targetRef="ReviewApproved">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${approved == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="fraud-review">
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartFraudReview">
+        <dc:Bounds x="162" y="262" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="152" y="305" width="56" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0e0yqa0_di" bpmnElement="EvaluateFraudRisk">
+        <dc:Bounds x="300" y="240" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_1pxrfnz_di" bpmnElement="RiskLevelGateway" isMarkerVisible="true">
+        <dc:Bounds x="535" y="255" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="531.5" y="303" width="57" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_15cz6ag_di" bpmnElement="ApproveReview">
+        <dc:Bounds x="760" y="80" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0rzja9y_di" bpmnElement="FraudAnalystReview">
+        <dc:Bounds x="760" y="240" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_114quao_di" bpmnElement="FraudManagerReview">
+        <dc:Bounds x="760" y="410" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_087ximg_di" bpmnElement="ReviewDecisionGateway" isMarkerVisible="true">
+        <dc:Bounds x="1135" y="335" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1073" y="353" width="54" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_0g6ddas_di" bpmnElement="ReviewApproved">
+        <dc:Bounds x="1232" y="102" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1206" y="78" width="87" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_0iwt1r2_di" bpmnElement="ReviewRejected">
+        <dc:Bounds x="1312" y="342" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1289" y="385" width="83" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_159sgqg_di" bpmnElement="ReviewTimedOut">
+        <dc:Bounds x="1032" y="432" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1015" y="475" width="70" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_145glmi_di" bpmnElement="MarkReviewTimedOut">
+        <dc:Bounds x="900" y="320" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_00cjkvj_di" bpmnElement="ManagerReviewTimer">
+        <dc:Bounds x="822" y="392" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_0qus6r7_di" bpmnElement="AnalystReviewTimer">
+        <dc:Bounds x="822" y="302" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_1ibfkv6_di" bpmnElement="Flow_1ibfkv6">
+        <di:waypoint x="198" y="280" />
+        <di:waypoint x="300" y="280" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_12sn4nb_di" bpmnElement="Flow_12sn4nb">
+        <di:waypoint x="400" y="280" />
+        <di:waypoint x="535" y="280" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0yoamsd_di" bpmnElement="LOW">
+        <di:waypoint x="560" y="255" />
+        <di:waypoint x="560" y="120" />
+        <di:waypoint x="760" y="120" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="647" y="102" width="26" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0xj5o9p_di" bpmnElement="MEDIUM">
+        <di:waypoint x="585" y="280" />
+        <di:waypoint x="760" y="280" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="637" y="262.5" width="45" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0pwcr1f_di" bpmnElement="HIGH">
+        <di:waypoint x="560" y="305" />
+        <di:waypoint x="560" y="450" />
+        <di:waypoint x="760" y="450" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="646" y="432.5" width="28" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05k3mal_di" bpmnElement="Flow_05k3mal">
+        <di:waypoint x="860" y="280" />
+        <di:waypoint x="910" y="280" />
+        <di:waypoint x="910" y="320" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_057ci6f_di" bpmnElement="Flow_057ci6f">
+        <di:waypoint x="860" y="450" />
+        <di:waypoint x="910" y="450" />
+        <di:waypoint x="910" y="400" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1c0sdcu_di" bpmnElement="Flow_1c0sdcu">
+        <di:waypoint x="810" y="240" />
+        <di:waypoint x="810" y="220" />
+        <di:waypoint x="1160" y="220" />
+        <di:waypoint x="1160" y="335" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1tfxue5_di" bpmnElement="Flow_1tfxue5">
+        <di:waypoint x="810" y="490" />
+        <di:waypoint x="810" y="510" />
+        <di:waypoint x="1160" y="510" />
+        <di:waypoint x="1160" y="385" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0s5etb1_di" bpmnElement="Approved">
+        <di:waypoint x="860" y="120" />
+        <di:waypoint x="1232" y="120" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1022" y="102" width="48" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1vgimb5_di" bpmnElement="Rejected">
+        <di:waypoint x="1185" y="360" />
+        <di:waypoint x="1312" y="360" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1223" y="343" width="44" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1reoyi8_di" bpmnElement="Flow_1reoyi8">
+        <di:waypoint x="950" y="400" />
+        <di:waypoint x="950" y="450" />
+        <di:waypoint x="1032" y="450" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0um29k2_di" bpmnElement="Flow_0um29k2">
+        <di:waypoint x="1160" y="335" />
+        <di:waypoint x="1160" y="310" />
+        <di:waypoint x="1210" y="310" />
+        <di:waypoint x="1210" y="200" />
+        <di:waypoint x="1250" y="200" />
+        <di:waypoint x="1250" y="138" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

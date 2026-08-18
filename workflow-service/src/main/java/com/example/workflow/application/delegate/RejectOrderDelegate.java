@@ -1,5 +1,6 @@
 package com.example.workflow.application.delegate;
 
+import com.example.workflow.infrastructure.client.OrderClient;
 import com.example.workflow.shared.ProcessVariables;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.trace.Span;
@@ -17,11 +18,17 @@ public class RejectOrderDelegate implements JavaDelegate {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(RejectOrderDelegate.class);
     private final Tracer tracer = GlobalOpenTelemetry.getTracer(RejectOrderDelegate.class.getName());
+    private final OrderClient orderClient;
+
+    public RejectOrderDelegate(OrderClient orderClient) {
+        this.orderClient = orderClient;
+    }
 
     @Override
     public void execute(DelegateExecution execution) {
         Span span = startDelegateSpan("bpmn.reject_order", execution);
         try (Scope ignored = span.makeCurrent()) {
+            String orderId = (String) execution.getVariable(ProcessVariables.ORDER_ID);
             execution.setVariable(ProcessVariables.ORDER_STATUS, "REJECTED");
             Object failureReason = execution.getVariable(ProcessVariables.FAILURE_REASON);
             span.setAttribute("order.status", "REJECTED");
@@ -30,6 +37,9 @@ public class RejectOrderDelegate implements JavaDelegate {
                     execution.getBusinessKey(),
                     execution.getVariable(ProcessVariables.CORRELATION_ID),
                     failureReason);
+            if (orderId != null) {
+                orderClient.updateOrderStatus(orderId, "REJECTED");
+            }
         } catch (RuntimeException exception) {
             span.recordException(exception);
             span.setStatus(StatusCode.ERROR, exception.getMessage());

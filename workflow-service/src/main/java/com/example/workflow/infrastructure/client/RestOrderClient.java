@@ -1,6 +1,7 @@
 package com.example.workflow.infrastructure.client;
 
 import java.time.Duration;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -40,5 +41,16 @@ public class RestOrderClient implements OrderClient {
                     orderId, response.correlationId(), response.status());
         }
         return response;
+    }
+
+    @Override
+    public void updateOrderStatus(String orderId, String status) {
+        LOGGER.info("Updating order status in order-service. orderId={}, status={}", orderId, status);
+        restTemplate.patchForObject(
+                orderBaseUrl + "/api/orders/{orderId}/status",
+                Map.of("status", status),
+                Void.class,
+                orderId
+        );
     }
 }

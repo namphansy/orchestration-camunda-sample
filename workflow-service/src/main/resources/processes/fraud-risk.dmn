@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/" xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/" xmlns:modeler="http://camunda.org/schema/modeler/1.0" xmlns:biodi="http://bpmn.io/schema/dmn/biodi/2.0" id="lorem" name="Fraud Risk Decision" namespace="http://camunda.org/schema/1.0/dmn" exporter="Camunda Modeler" exporterVersion="5.49.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.24.0">
+  <decision id="fraud-risk" name="Fraud Risk">
+    <decisionTable id="DecisionTable_0jvlkei">
+      <input id="InputClause_1rveajp" biodi:width="192">
+        <inputExpression id="LiteralExpression_03heozc" typeRef="integer">
+          <text>fraudScore</text>
+        </inputExpression>
+      </input>
+      <input id="InputClause_0l6gwqy">
+        <inputExpression id="LiteralExpression_0yseqhi" typeRef="double">
+          <text>orderAmount</text>
+        </inputExpression>
+      </input>
+      <output id="OutputClause_0t95u4u" name="riskLevel" typeRef="string" />
+      <rule id="DecisionRule_0yzicbl">
+        <inputEntry id="UnaryTests_0pczpgu">
+          <text>&lt; 40</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0ya5q4z">
+          <text></text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0sdjedp">
+          <text>"LOW"</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_187xaaf">
+        <inputEntry id="UnaryTests_04tyav0">
+          <text>&gt;= 40, &lt; 80</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1oy8oz9">
+          <text></text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_131dbqh">
+          <text>"MEDIUM"</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0d0rkcz">
+        <inputEntry id="UnaryTests_01eoy9z">
+          <text>&gt;= 80</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_196xb7s">
+          <text></text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_05toouq">
+          <text>"HIGH"</text>
+        </outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram>
+      <dmndi:DMNShape id="DMNShape_175yecv" dmnElementRef="fraud-risk">
+        <dc:Bounds height="80" width="180" x="150" y="70" />
+      </dmndi:DMNShape>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>

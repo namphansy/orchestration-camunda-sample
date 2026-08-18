@@ -3,6 +3,7 @@ package com.example.order.application.service;
 import com.example.order.api.request.CreateOrderRequest;
 import com.example.order.api.response.OrderResponse;
 import com.example.order.domain.model.OrderEntity;
+import com.example.order.domain.model.OrderStatus;
 import com.example.order.domain.repository.OrderRepository;
 import com.example.order.infrastructure.client.WorkflowClient;
 
@@ -90,6 +91,15 @@ public class OrderService {
         return orderRepository.findById(orderId)
                 .map(OrderResponse::from)
                 .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+    }
+
+    @Transactional
+    public void updateOrderStatus(String orderId, OrderStatus status) {
+        LOGGER.info("Updating status for order. orderId={}, status={}", orderId, status);
+        OrderEntity order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+        order.updateStatus(status);
+        orderRepository.saveAndFlush(order);
     }
 
     private String normalizeCorrelationId(String correlationId) {

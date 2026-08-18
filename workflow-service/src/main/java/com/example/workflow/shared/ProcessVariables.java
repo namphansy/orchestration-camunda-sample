@@ -27,6 +27,18 @@ public final class ProcessVariables {
     public static final String INVENTORY_RELEASE_STATUS = "inventoryReleaseStatus";
     public static final String FAILURE_REASON = "failureReason";
 
+   
+    public static final String REVIEW_ID     = "reviewId";
+    public static final String FRAUD_SCORE   = "fraudScore";
+    public static final String RISK_LEVEL    = "riskLevel";
+    public static final String REVIEW_STATUS = "reviewStatus";
+    public static final String CUSTOMER_ID   = "customerId";
+
+
+    public static final String STATUS_APPROVED  = "APPROVED";
+    public static final String STATUS_REJECTED  = "REJECTED";
+    public static final String STATUS_TIMED_OUT = "TIMED_OUT";
+
     private ProcessVariables() {
     }
 }

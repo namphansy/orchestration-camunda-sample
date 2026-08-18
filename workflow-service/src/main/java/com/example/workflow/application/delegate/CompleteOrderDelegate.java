@@ -1,5 +1,6 @@
 package com.example.workflow.application.delegate;
 
+import com.example.workflow.infrastructure.client.OrderClient;
 import com.example.workflow.shared.ProcessVariables;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.trace.Span;
@@ -17,16 +18,25 @@ public class CompleteOrderDelegate implements JavaDelegate {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(CompleteOrderDelegate.class);
     private final Tracer tracer = GlobalOpenTelemetry.getTracer(CompleteOrderDelegate.class.getName());
+    private final OrderClient orderClient;
+
+    public CompleteOrderDelegate(OrderClient orderClient) {
+        this.orderClient = orderClient;
+    }
 
     @Override
     public void execute(DelegateExecution execution) {
         Span span = startDelegateSpan("bpmn.complete_order", execution);
         try (Scope ignored = span.makeCurrent()) {
+            String orderId = (String) execution.getVariable(ProcessVariables.ORDER_ID);
             LOGGER.info("Completed order in learning workflow. businessKey={}, correlationId={}",
                     execution.getBusinessKey(),
                     execution.getVariable(ProcessVariables.CORRELATION_ID));
             execution.setVariable(ProcessVariables.ORDER_STATUS, "COMPLETED");
             span.setAttribute("order.status", "COMPLETED");
+            if (orderId != null) {
+                orderClient.updateOrderStatus(orderId, "COMPLETED");
+            }
         } catch (RuntimeException exception) {
             span.recordException(exception);
             span.setStatus(StatusCode.ERROR, exception.getMessage());

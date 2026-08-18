@@ -8,6 +8,8 @@ public interface OrderClient {
 
     OrderDetailsResponse getOrder(String orderId);
 
+    void updateOrderStatus(String orderId, String status);
+
     record OrderDetailsResponse(
             String orderId,
             String customerId,
