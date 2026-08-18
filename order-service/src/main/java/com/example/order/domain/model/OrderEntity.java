@@ -48,6 +48,9 @@ public class OrderEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "delivered_at")
+    private Instant deliveredAt;
+
     protected OrderEntity() {
     }
 
@@ -69,6 +72,12 @@ public class OrderEntity {
     public void markProcessing(String workflowProcessInstanceId) {
         this.workflowProcessInstanceId = workflowProcessInstanceId;
         this.status = OrderStatus.PROCESSING;
+        this.updatedAt = Instant.now();
+    }
+
+    public void markDelivered(Instant deliveredAt) {
+        this.status = OrderStatus.COMPLETED;
+        this.deliveredAt = deliveredAt;
         this.updatedAt = Instant.now();
     }
 
@@ -106,5 +115,9 @@ public class OrderEntity {
 
     public String getWorkflowProcessInstanceId() {
         return workflowProcessInstanceId;
+    }
+
+    public Instant getDeliveredAt() {
+        return deliveredAt;
     }
 }

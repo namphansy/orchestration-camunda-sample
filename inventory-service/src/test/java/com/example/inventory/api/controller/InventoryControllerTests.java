@@ -114,4 +114,46 @@ class InventoryControllerTests {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.errorCode").value("INSUFFICIENT_STOCK"));
     }
+
+    @Test
+    void restockAddsStockOnlyOnceForDuplicateRequest()
+                throws Exception {
+        int quantityBefore = stockItemRepository
+                .findById("SKU-DEFAULT")
+                .orElseThrow()
+                .getAvailableQuantity();
+
+        String requestBody = """
+                {
+                "returnId": "return-restock-test-1",
+                "orderId": "order-restock-test-1",
+                "sku": "SKU-DEFAULT",
+                "quantity": 2,
+                "correlationId": "correlation-restock-test-1"
+                }
+                """;
+
+        for (int attempt = 0; attempt < 2; attempt++) {
+                mockMvc.perform(post("/api/inventory/restocks")
+                                .header(
+                                        "Idempotency-Key",
+                                        "inventory-restock:"
+                                                + "return-restock-test-1:"
+                                                + "SKU-DEFAULT"
+                                )
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(requestBody))
+                        .andExpect(status().isCreated())
+                        .andExpect(jsonPath("$.status")
+                                .value("RESTOCKED"))
+                        .andExpect(jsonPath("$.quantity").value(2));
+        }
+
+        int quantityAfter = stockItemRepository
+                .findById("SKU-DEFAULT")
+                .orElseThrow()
+                .getAvailableQuantity();
+
+        assertThat(quantityAfter).isEqualTo(quantityBefore + 2);
+    }
 }

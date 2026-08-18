@@ -1,8 +1,10 @@
 package com.example.order.application.service;
 
+import com.example.order.api.request.CompleteOrderDeliveryRequest;
 import com.example.order.api.request.CreateOrderRequest;
 import com.example.order.api.response.OrderResponse;
 import com.example.order.domain.model.OrderEntity;
+import com.example.order.domain.model.OrderStatus;
 import com.example.order.domain.repository.OrderRepository;
 import com.example.order.infrastructure.client.WorkflowClient;
 
@@ -11,6 +13,8 @@ import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Scope;
+
+import java.time.Instant;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -89,7 +93,7 @@ public class OrderService {
     public OrderResponse getOrder(String orderId) {
         return orderRepository.findById(orderId)
                 .map(OrderResponse::from)
-                .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+                .orElseThrow(() -> new OrderNotFoundException(orderId));
     }
 
     private String normalizeCorrelationId(String correlationId) {
@@ -97,5 +101,49 @@ public class OrderService {
             return UUID.randomUUID().toString();
         }
         return correlationId;
+    }
+
+    @Transactional
+    public OrderResponse completeDelivery(
+            String orderId,
+            CompleteOrderDeliveryRequest request
+    ) {
+        OrderEntity order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new OrderNotFoundException(orderId));
+
+        if (!order.getCorrelationId().equals(request.correlationId())) {
+            throw new OrderConflictException(
+                "Correlation ID does not match order: " + orderId
+            );
+        }
+
+        if (request.deliveredAt().isAfter(Instant.now())) {
+            throw new IllegalArgumentException(
+                    "Delivered time cannot be in the future"
+            );
+        }
+
+        if (order.getStatus() == OrderStatus.REJECTED
+                || order.getStatus() == OrderStatus.CANCELLED
+                || order.getStatus() == OrderStatus.FAILED) {
+            throw new OrderConflictException(
+                "Order cannot be delivered from status: "
+                    + order.getStatus()
+            );
+        }
+
+        if (order.getStatus() == OrderStatus.COMPLETED) {
+            if (request.deliveredAt().equals(order.getDeliveredAt())) {
+                return OrderResponse.from(order);
+            }
+
+            throw new OrderConflictException(
+                "Order delivery was already completed: " + orderId
+            );
+        }
+
+        order.markDelivered(request.deliveredAt());
+
+        return OrderResponse.from(orderRepository.save(order));
     }
 }

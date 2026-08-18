@@ -4,6 +4,9 @@ import com.example.inventory.api.request.ReserveInventoryRequest;
 import com.example.inventory.api.response.InventoryReservationResponse;
 import com.example.inventory.application.service.InventoryReservationService;
 import com.example.inventory.domain.exception.InsufficientStockException;
+import com.example.inventory.api.request.RestockInventoryRequest;
+import com.example.inventory.api.response.InventoryRestockResponse;
+import com.example.inventory.application.service.InventoryRestockService;
 import jakarta.validation.Valid;
 import java.time.Instant;
 import java.util.Map;
@@ -24,8 +27,14 @@ public class InventoryController {
 
     private final InventoryReservationService reservationService;
 
-    public InventoryController(InventoryReservationService reservationService) {
+    private final InventoryRestockService restockService;
+
+    public InventoryController(
+            InventoryReservationService reservationService,
+            InventoryRestockService restockService
+    ) {
         this.reservationService = reservationService;
+        this.restockService = restockService;
     }
 
     @PostMapping("/reservations")
@@ -35,6 +44,15 @@ public class InventoryController {
             @Valid @RequestBody ReserveInventoryRequest request
     ) {
         return reservationService.reserve(request, idempotencyKey);
+    }
+
+    @PostMapping("/restocks")
+    @ResponseStatus(HttpStatus.CREATED)
+    public InventoryRestockResponse restock(
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @Valid @RequestBody RestockInventoryRequest request
+    ) {
+        return restockService.restock(request, idempotencyKey);
     }
 
     @GetMapping("/reservations/{reservationId}")

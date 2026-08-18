@@ -41,6 +41,13 @@ public class PaymentController {
         return paymentService.getTransaction(transactionId);
     }
 
+    @GetMapping("/transactions/by-order/{orderId}")
+    public PaymentTransactionResponse getChargedTransactionByOrderId(
+            @PathVariable("orderId") String orderId
+    ) {
+        return paymentService.getChargedTransactionByOrderId(orderId);
+    }
+
     @PostMapping("/transactions/{transactionId}/refund")
     public PaymentTransactionResponse refund(
             @PathVariable("transactionId") String transactionId,

@@ -75,4 +75,14 @@ public class RestPaymentClient implements PaymentClient {
         }
         return body;
     }
+
+    @Override
+    public PaymentChargeResponse getChargedTransactionByOrderId(String orderId) {
+        return restTemplate.getForObject(
+                paymentBaseUrl
+                        + "/api/payments/transactions/by-order/{orderId}",
+                PaymentChargeResponse.class,
+                orderId
+        );
+    }
 }

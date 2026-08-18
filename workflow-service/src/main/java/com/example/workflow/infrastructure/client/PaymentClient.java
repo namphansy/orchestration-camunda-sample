@@ -8,6 +8,8 @@ public interface PaymentClient {
 
     PaymentChargeResponse refundPayment(String transactionId, String idempotencyKey);
 
+    PaymentChargeResponse getChargedTransactionByOrderId(String orderId);
+
     record PaymentChargeRequest(
             String orderId,
             BigDecimal amount,

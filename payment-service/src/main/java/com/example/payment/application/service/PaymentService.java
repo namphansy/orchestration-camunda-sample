@@ -91,6 +91,22 @@ public class PaymentService {
                 .orElseThrow(() -> new IllegalArgumentException("Payment transaction not found: " + transactionId));
     }
 
+    @Transactional(readOnly = true)
+    public PaymentTransactionResponse getChargedTransactionByOrderId(
+            String orderId
+    ) {
+        return transactionRepository
+                .findFirstByOrderIdAndStatusOrderByCreatedAtDesc(
+                        orderId,
+                        PaymentStatus.CHARGED
+                )
+                .map(PaymentTransactionResponse::from)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Charged payment transaction not found for order: "
+                                + orderId
+                ));
+    }
+
     @Transactional
     public PaymentTransactionResponse refund(String transactionId, String idempotencyKey) {
         Span span = tracer.spanBuilder("payment.refund").startSpan();

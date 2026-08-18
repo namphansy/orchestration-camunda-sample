@@ -1,0 +1,293 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="Definitions_1dtgb79" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="5.49.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.24.0">
+  <bpmn:process id="return-refund" name="Return Refund" isExecutable="true">
+    <bpmn:startEvent id="StartReturn" name="Start Return">
+      <bpmn:outgoing>Flow_18krbw5</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="ValidateReturnEligibility" name="Validate Return Eligibility" camunda:delegateExpression="${validateReturnEligibilityDelegate}">
+      <bpmn:incoming>Flow_18krbw5</bpmn:incoming>
+      <bpmn:outgoing>Flow_1c8ie3b</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="CreateReturnShipment" name="Create Return Shipment" camunda:delegateExpression="${createReturnShipmentDelegate}">
+      <bpmn:incoming>Flow_1c8ie3b</bpmn:incoming>
+      <bpmn:outgoing>Flow_0bqvail</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_18krbw5" sourceRef="StartReturn" targetRef="ValidateReturnEligibility" />
+    <bpmn:sequenceFlow id="Flow_1c8ie3b" sourceRef="ValidateReturnEligibility" targetRef="CreateReturnShipment" />
+    <bpmn:receiveTask id="WaitForReturnItem" name="Wait For Return Item" messageRef="Message_3d6pkch">
+      <bpmn:incoming>Flow_0bqvail</bpmn:incoming>
+      <bpmn:outgoing>Flow_0dbep6l</bpmn:outgoing>
+    </bpmn:receiveTask>
+    <bpmn:boundaryEvent id="ReturnItemTimeout" name="Return Item Timeout" attachedToRef="WaitForReturnItem">
+      <bpmn:outgoing>Flow_1kmqqow</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerEventDefinition_1nsd3na">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">P7D</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="MarkReturnExpired" name="Mark Return Expired" camunda:delegateExpression="${markReturnExpiredDelegate}">
+      <bpmn:incoming>Flow_1kmqqow</bpmn:incoming>
+      <bpmn:outgoing>Flow_1fv3ya0</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_1kmqqow" sourceRef="ReturnItemTimeout" targetRef="MarkReturnExpired" />
+    <bpmn:endEvent id="ReturnExpired" name="Return Expired">
+      <bpmn:incoming>Flow_1u2t1yo</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_0bqvail" sourceRef="CreateReturnShipment" targetRef="WaitForReturnItem" />
+    <bpmn:sequenceFlow id="Flow_0dbep6l" sourceRef="WaitForReturnItem" targetRef="MarkReturnInspection" />
+    <bpmn:serviceTask id="MarkReturnInspection" name="Mark Return Inspection" camunda:delegateExpression="${markReturnInspectionDelegate}">
+      <bpmn:incoming>Flow_0dbep6l</bpmn:incoming>
+      <bpmn:outgoing>Flow_13xe1qi</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_13xe1qi" sourceRef="MarkReturnInspection" targetRef="WaitForInspection" />
+    <bpmn:receiveTask id="WaitForInspection" name="Wait For Inspection" messageRef="Message_02su8ok">
+      <bpmn:incoming>Flow_13xe1qi</bpmn:incoming>
+      <bpmn:outgoing>Flow_0vkgunp</bpmn:outgoing>
+    </bpmn:receiveTask>
+    <bpmn:exclusiveGateway id="InspectionDecision" name="Inspection Accepted?" default="Flow_096he4e">
+      <bpmn:incoming>Flow_0vkgunp</bpmn:incoming>
+      <bpmn:outgoing>Flow_1dgu2o3</bpmn:outgoing>
+      <bpmn:outgoing>Flow_096he4e</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="Flow_0vkgunp" sourceRef="WaitForInspection" targetRef="InspectionDecision" />
+    <bpmn:sequenceFlow id="Flow_1dgu2o3" name="Accepted" sourceRef="InspectionDecision" targetRef="MarkReturnAccepted">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${inspectionAccepted == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:serviceTask id="MarkReturnAccepted" name="Mark Return Accepted" camunda:delegateExpression="${markReturnAcceptedDelegate}">
+      <bpmn:incoming>Flow_1dgu2o3</bpmn:incoming>
+      <bpmn:outgoing>Flow_0pf4oul</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_096he4e" sourceRef="InspectionDecision" targetRef="MarkReturnRejected" />
+    <bpmn:serviceTask id="MarkReturnRejected" name="Mark Return Rejected" camunda:delegateExpression="${markReturnRejectedDelegate}">
+      <bpmn:incoming>Flow_096he4e</bpmn:incoming>
+      <bpmn:outgoing>Flow_1itpm33</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="ReturnRejected" name="Return Rejected">
+      <bpmn:incoming>Flow_075gyh2</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_0pf4oul" sourceRef="MarkReturnAccepted" targetRef="RefundPayment" />
+    <bpmn:serviceTask id="RefundPayment" name="Refund Payment" camunda:asyncBefore="true" camunda:delegateExpression="${refundReturnPaymentDelegate}">
+      <bpmn:extensionElements>
+        <camunda:failedJobRetryTimeCycle>R3/PT1S</camunda:failedJobRetryTimeCycle>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_0pf4oul</bpmn:incoming>
+      <bpmn:outgoing>Flow_0kck44h</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_0kck44h" sourceRef="RefundPayment" targetRef="MarkReturnRefunded" />
+    <bpmn:serviceTask id="MarkReturnRefunded" name="Mark Return Refunded" camunda:delegateExpression="${markReturnRefundedDelegate}">
+      <bpmn:incoming>Flow_0kck44h</bpmn:incoming>
+      <bpmn:outgoing>Flow_0gvwhfv</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_0gvwhfv" sourceRef="MarkReturnRefunded" targetRef="RestockInventory" />
+    <bpmn:serviceTask id="RestockInventory" name="Restock Inventory" camunda:asyncBefore="true" camunda:delegateExpression="${restockReturnedInventoryDelegate}">
+      <bpmn:extensionElements>
+        <camunda:failedJobRetryTimeCycle>R3/PT1S</camunda:failedJobRetryTimeCycle>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_0gvwhfv</bpmn:incoming>
+      <bpmn:outgoing>Flow_0am0nmd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="ReturnRefunded" name="Return Refunded">
+      <bpmn:incoming>Flow_1qd8c92</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_0am0nmd" sourceRef="RestockInventory" targetRef="NotifyReturnRefunded" />
+    <bpmn:serviceTask id="NotifyReturnRefunded" name="Notify Return Refunded" camunda:asyncBefore="true" camunda:delegateExpression="${publishReturnNotificationDelegate}">
+      <bpmn:extensionElements>
+        <camunda:failedJobRetryTimeCycle>R3/PT1S</camunda:failedJobRetryTimeCycle>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_0am0nmd</bpmn:incoming>
+      <bpmn:outgoing>Flow_1qd8c92</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_1qd8c92" sourceRef="NotifyReturnRefunded" targetRef="ReturnRefunded" />
+    <bpmn:sequenceFlow id="Flow_1itpm33" sourceRef="MarkReturnRejected" targetRef="NotifyReturnRejected" />
+    <bpmn:serviceTask id="NotifyReturnRejected" name="Notify Return Rejected" camunda:asyncBefore="true" camunda:delegateExpression="${publishReturnNotificationDelegate}">
+      <bpmn:extensionElements>
+        <camunda:failedJobRetryTimeCycle>R3/PT1S</camunda:failedJobRetryTimeCycle>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_1itpm33</bpmn:incoming>
+      <bpmn:outgoing>Flow_075gyh2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_075gyh2" sourceRef="NotifyReturnRejected" targetRef="ReturnRejected" />
+    <bpmn:sequenceFlow id="Flow_1fv3ya0" sourceRef="MarkReturnExpired" targetRef="NotifyReturnExpired" />
+    <bpmn:serviceTask id="NotifyReturnExpired" name="Notify Return Expired" camunda:asyncBefore="true" camunda:delegateExpression="${publishReturnNotificationDelegate}">
+      <bpmn:extensionElements>
+        <camunda:failedJobRetryTimeCycle>R3/PT1S</camunda:failedJobRetryTimeCycle>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_1fv3ya0</bpmn:incoming>
+      <bpmn:outgoing>Flow_1u2t1yo</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_1u2t1yo" sourceRef="NotifyReturnExpired" targetRef="ReturnExpired" />
+  </bpmn:process>
+  <bpmn:message id="Message_3d6pkch" name="ReturnItemReceived" />
+  <bpmn:message id="Message_02su8ok" name="ReturnInspectionCompleted" />
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="return-refund">
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartReturn">
+        <dc:Bounds x="172" y="142" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="161" y="185" width="60" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_19vr9eb_di" bpmnElement="ValidateReturnEligibility">
+        <dc:Bounds x="310" y="120" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0ukb4pe_di" bpmnElement="CreateReturnShipment">
+        <dc:Bounds x="530" y="120" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1lz5gz8_di" bpmnElement="WaitForReturnItem">
+        <dc:Bounds x="730" y="120" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1e5s2lz_di" bpmnElement="MarkReturnExpired">
+        <dc:Bounds x="730" y="330" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_0istydl_di" bpmnElement="ReturnExpired">
+        <dc:Bounds x="942" y="512" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="923" y="555" width="74" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_02skzy4_di" bpmnElement="MarkReturnInspection">
+        <dc:Bounds x="930" y="120" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_02k75ne_di" bpmnElement="WaitForInspection">
+        <dc:Bounds x="1130" y="120" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_1uyp6cz_di" bpmnElement="InspectionDecision" isMarkerVisible="true">
+        <dc:Bounds x="1315" y="135" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1307" y="96" width="66" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1azrljt_di" bpmnElement="MarkReturnAccepted">
+        <dc:Bounds x="1450" y="120" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1whlkmx_di" bpmnElement="MarkReturnRejected">
+        <dc:Bounds x="1450" y="230" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0cbcyi9_di" bpmnElement="RefundPayment">
+        <dc:Bounds x="1640" y="120" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_19ggq2l_di" bpmnElement="MarkReturnRefunded">
+        <dc:Bounds x="1830" y="120" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1s1hof6_di" bpmnElement="RestockInventory">
+        <dc:Bounds x="2020" y="120" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_1fdn1ij_di" bpmnElement="ReturnRefunded">
+        <dc:Bounds x="2392" y="142" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2368" y="185" width="84" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0qwz6f5_di" bpmnElement="NotifyReturnRefunded">
+        <dc:Bounds x="2210" y="120" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1rvdowd_di" bpmnElement="NotifyReturnExpired">
+        <dc:Bounds x="910" y="330" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1prbysz_di" bpmnElement="NotifyReturnRejected">
+        <dc:Bounds x="1450" y="410" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_0lz0ry5_di" bpmnElement="ReturnRejected">
+        <dc:Bounds x="1482" y="582" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1460" y="625" width="80" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_1payued_di" bpmnElement="ReturnItemTimeout">
+        <dc:Bounds x="762" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="751" y="225" width="58" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_18krbw5_di" bpmnElement="Flow_18krbw5">
+        <di:waypoint x="208" y="160" />
+        <di:waypoint x="310" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1c8ie3b_di" bpmnElement="Flow_1c8ie3b">
+        <di:waypoint x="410" y="160" />
+        <di:waypoint x="530" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1kmqqow_di" bpmnElement="Flow_1kmqqow">
+        <di:waypoint x="780" y="218" />
+        <di:waypoint x="780" y="330" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0bqvail_di" bpmnElement="Flow_0bqvail">
+        <di:waypoint x="630" y="160" />
+        <di:waypoint x="730" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0dbep6l_di" bpmnElement="Flow_0dbep6l">
+        <di:waypoint x="830" y="160" />
+        <di:waypoint x="930" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_13xe1qi_di" bpmnElement="Flow_13xe1qi">
+        <di:waypoint x="1030" y="160" />
+        <di:waypoint x="1130" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0vkgunp_di" bpmnElement="Flow_0vkgunp">
+        <di:waypoint x="1230" y="160" />
+        <di:waypoint x="1315" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1dgu2o3_di" bpmnElement="Flow_1dgu2o3">
+        <di:waypoint x="1365" y="160" />
+        <di:waypoint x="1450" y="160" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1385" y="142" width="46" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_096he4e_di" bpmnElement="Flow_096he4e">
+        <di:waypoint x="1340" y="185" />
+        <di:waypoint x="1340" y="270" />
+        <di:waypoint x="1450" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0pf4oul_di" bpmnElement="Flow_0pf4oul">
+        <di:waypoint x="1550" y="160" />
+        <di:waypoint x="1640" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0kck44h_di" bpmnElement="Flow_0kck44h">
+        <di:waypoint x="1740" y="160" />
+        <di:waypoint x="1830" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0gvwhfv_di" bpmnElement="Flow_0gvwhfv">
+        <di:waypoint x="1930" y="160" />
+        <di:waypoint x="2020" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0am0nmd_di" bpmnElement="Flow_0am0nmd">
+        <di:waypoint x="2120" y="160" />
+        <di:waypoint x="2210" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1qd8c92_di" bpmnElement="Flow_1qd8c92">
+        <di:waypoint x="2310" y="160" />
+        <di:waypoint x="2392" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1itpm33_di" bpmnElement="Flow_1itpm33">
+        <di:waypoint x="1500" y="310" />
+        <di:waypoint x="1500" y="410" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_075gyh2_di" bpmnElement="Flow_075gyh2">
+        <di:waypoint x="1500" y="490" />
+        <di:waypoint x="1500" y="582" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1fv3ya0_di" bpmnElement="Flow_1fv3ya0">
+        <di:waypoint x="830" y="370" />
+        <di:waypoint x="910" y="370" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1u2t1yo_di" bpmnElement="Flow_1u2t1yo">
+        <di:waypoint x="960" y="410" />
+        <di:waypoint x="960" y="512" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
