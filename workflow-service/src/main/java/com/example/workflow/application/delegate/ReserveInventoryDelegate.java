@@ -12,6 +12,7 @@ import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Scope;
 import java.util.ArrayList;
 import java.util.List;
+import org.camunda.bpm.engine.RuntimeService;
 import org.camunda.bpm.engine.delegate.BpmnError;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
@@ -28,10 +29,12 @@ public class ReserveInventoryDelegate implements JavaDelegate {
 
     private final InventoryClient inventoryClient;
     private final OrderClient orderClient;
+    private final RuntimeService runtimeService;
 
-    public ReserveInventoryDelegate(InventoryClient inventoryClient, OrderClient orderClient) {
+    public ReserveInventoryDelegate(InventoryClient inventoryClient, OrderClient orderClient, RuntimeService runtimeService) {
         this.inventoryClient = inventoryClient;
         this.orderClient = orderClient;
+        this.runtimeService = runtimeService;
     }
 
     @Override
@@ -54,15 +57,20 @@ public class ReserveInventoryDelegate implements JavaDelegate {
                 );
                 span.setAttribute("inventory.reservation.id", reservation.reservationId());
                 span.setAttribute("inventory.status", "RESERVED");
+                List<String> reservationIds = appendReservationId(execution, reservation.reservationId());
                 execution.setVariable(ProcessVariables.INVENTORY_RESERVATION_ID, reservation.reservationId());
-                execution.setVariable(ProcessVariables.INVENTORY_RESERVATION_IDS, appendReservationId(execution, reservation.reservationId()));
+                execution.setVariable(ProcessVariables.INVENTORY_RESERVATION_IDS, reservationIds);
                 execution.setVariable(ProcessVariables.INVENTORY_STATUS, "RESERVED");
+                setProcessVariable(execution, ProcessVariables.INVENTORY_RESERVATION_ID, reservation.reservationId());
+                setProcessVariable(execution, ProcessVariables.INVENTORY_RESERVATION_IDS, reservationIds);
+                setProcessVariable(execution, ProcessVariables.INVENTORY_STATUS, "RESERVED");
             } catch (InsufficientStockException exception) {
                 span.recordException(exception);
                 span.setStatus(StatusCode.ERROR, exception.getMessage());
                 span.setAttribute("inventory.status", "INSUFFICIENT_STOCK");
-                execution.setVariable(ProcessVariables.INVENTORY_STATUS, "INSUFFICIENT_STOCK");
-                execution.setVariable(ProcessVariables.FAILURE_REASON, exception.getMessage());
+                releasePartialReservations(execution, businessKey);
+                setProcessVariable(execution, ProcessVariables.INVENTORY_STATUS, "INSUFFICIENT_STOCK");
+                setProcessVariable(execution, ProcessVariables.FAILURE_REASON, exception.getMessage());
                 throw new BpmnError(INSUFFICIENT_STOCK_ERROR, exception.getMessage());
             }
         } catch (RuntimeException exception) {
@@ -97,6 +105,9 @@ public class ReserveInventoryDelegate implements JavaDelegate {
 
     private List<String> appendReservationId(DelegateExecution execution, String reservationId) {
         Object existing = execution.getVariable(ProcessVariables.INVENTORY_RESERVATION_IDS);
+        if (!(existing instanceof List<?>)) {
+            existing = runtimeService.getVariable(execution.getProcessInstanceId(), ProcessVariables.INVENTORY_RESERVATION_IDS);
+        }
         List<String> reservationIds = new ArrayList<>();
         if (existing instanceof List<?> values) {
             values.stream()
@@ -105,6 +116,35 @@ public class ReserveInventoryDelegate implements JavaDelegate {
         }
         reservationIds.add(reservationId);
         return reservationIds;
+    }
+
+    private void releasePartialReservations(DelegateExecution execution, String businessKey) {
+        Object existing = execution.getVariable(ProcessVariables.INVENTORY_RESERVATION_IDS);
+        if (!(existing instanceof List<?>)) {
+            existing = runtimeService.getVariable(execution.getProcessInstanceId(), ProcessVariables.INVENTORY_RESERVATION_IDS);
+        }
+        if (existing instanceof List<?> values) {
+            for (Object value : values) {
+                if (value == null) {
+                    continue;
+                }
+                String reservationId = String.valueOf(value);
+                InventoryClient.InventoryReservationResponse release = inventoryClient.releaseInventory(
+                        reservationId,
+                        "inventory-release:" + businessKey + ":" + reservationId
+                );
+                if (release != null) {
+                    execution.setVariable(ProcessVariables.INVENTORY_RELEASE_STATUS, release.status());
+                    execution.setVariable(ProcessVariables.INVENTORY_STATUS, release.status());
+                    setProcessVariable(execution, ProcessVariables.INVENTORY_RELEASE_STATUS, release.status());
+                    setProcessVariable(execution, ProcessVariables.INVENTORY_STATUS, release.status());
+                }
+            }
+        }
+    }
+
+    private void setProcessVariable(DelegateExecution execution, String variableName, Object value) {
+        runtimeService.setVariable(execution.getProcessInstanceId(), variableName, value);
     }
 
     private Span startDelegateSpan(String spanName, DelegateExecution execution) {

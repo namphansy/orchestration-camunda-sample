@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" id="Definitions_BackorderFulfillmentDraft" targetNamespace="http://example.com/workflow/backorder" exporter="Codex" exporterVersion="1.0">
+  <bpmn:message id="Message_RestockReceived" name="RestockReceived" />
+  <bpmn:process id="backorder-fulfillment" name="Backorder Fulfillment" isExecutable="true">
+    <bpmn:startEvent id="StartBackorder" name="Start Backorder">
+      <bpmn:outgoing>Flow_Start_MarkWaiting</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="MarkBackorderWaitingForRestock" name="Mark Backorder Waiting For Restock" camunda:delegateExpression="${markBackorderWaitingForRestockDelegate}">
+      <bpmn:incoming>Flow_Start_MarkWaiting</bpmn:incoming>
+      <bpmn:outgoing>Flow_MarkWaiting_WaitRestock</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:receiveTask id="ReceiveRestockEvent" name="Receive Restock Event" messageRef="Message_RestockReceived">
+      <bpmn:incoming>Flow_MarkWaiting_WaitRestock</bpmn:incoming>
+      <bpmn:outgoing>Flow_RestockReceived_ReserveInventory</bpmn:outgoing>
+    </bpmn:receiveTask>
+    <bpmn:boundaryEvent id="BackorderRestockTimeoutBoundary" name="Backorder Restock Timeout" attachedToRef="ReceiveRestockEvent">
+      <bpmn:outgoing>Flow_Timeout_MarkExpired</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerEventDefinition_BackorderTimeout">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT5M</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="ReserveBackorderInventory" name="Reserve Backorder Inventory" camunda:delegateExpression="${reserveBackorderInventoryDelegate}">
+      <bpmn:incoming>Flow_RestockReceived_ReserveInventory</bpmn:incoming>
+      <bpmn:outgoing>Flow_ReserveInventory_MarkReserved</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="MarkBackorderReserved" name="Mark Backorder Reserved" camunda:delegateExpression="${markBackorderReservedDelegate}">
+      <bpmn:incoming>Flow_ReserveInventory_MarkReserved</bpmn:incoming>
+      <bpmn:outgoing>Flow_MarkReserved_Completed</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="BackorderCompleted" name="Backorder Completed">
+      <bpmn:incoming>Flow_MarkReserved_Completed</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:serviceTask id="MarkBackorderExpired" name="Mark Backorder Expired" camunda:delegateExpression="${markBackorderExpiredDelegate}">
+      <bpmn:incoming>Flow_Timeout_MarkExpired</bpmn:incoming>
+      <bpmn:outgoing>Flow_MarkExpired_Expired</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="BackorderExpired" name="Backorder Expired">
+      <bpmn:incoming>Flow_MarkExpired_Expired</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Start_MarkWaiting" sourceRef="StartBackorder" targetRef="MarkBackorderWaitingForRestock" />
+    <bpmn:sequenceFlow id="Flow_MarkWaiting_WaitRestock" sourceRef="MarkBackorderWaitingForRestock" targetRef="ReceiveRestockEvent" />
+    <bpmn:sequenceFlow id="Flow_RestockReceived_ReserveInventory" sourceRef="ReceiveRestockEvent" targetRef="ReserveBackorderInventory" />
+    <bpmn:sequenceFlow id="Flow_ReserveInventory_MarkReserved" sourceRef="ReserveBackorderInventory" targetRef="MarkBackorderReserved" />
+    <bpmn:sequenceFlow id="Flow_MarkReserved_Completed" sourceRef="MarkBackorderReserved" targetRef="BackorderCompleted" />
+    <bpmn:sequenceFlow id="Flow_Timeout_MarkExpired" sourceRef="BackorderRestockTimeoutBoundary" targetRef="MarkBackorderExpired" />
+    <bpmn:sequenceFlow id="Flow_MarkExpired_Expired" sourceRef="MarkBackorderExpired" targetRef="BackorderExpired" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_BackorderFulfillmentDraft">
+    <bpmndi:BPMNPlane id="BPMNPlane_BackorderFulfillmentDraft" bpmnElement="backorder-fulfillment">
+      <bpmndi:BPMNShape id="StartBackorder_di" bpmnElement="StartBackorder">
+        <dc:Bounds x="150" y="180" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="132" y="223" width="72" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="MarkBackorderWaitingForRestock_di" bpmnElement="MarkBackorderWaitingForRestock">
+        <dc:Bounds x="250" y="158" width="180" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ReceiveRestockEvent_di" bpmnElement="ReceiveRestockEvent">
+        <dc:Bounds x="500" y="158" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BackorderRestockTimeoutBoundary_di" bpmnElement="BackorderRestockTimeoutBoundary">
+        <dc:Bounds x="567" y="220" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="544" y="263" width="83" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ReserveBackorderInventory_di" bpmnElement="ReserveBackorderInventory">
+        <dc:Bounds x="750" y="158" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="MarkBackorderReserved_di" bpmnElement="MarkBackorderReserved">
+        <dc:Bounds x="1000" y="158" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BackorderCompleted_di" bpmnElement="BackorderCompleted">
+        <dc:Bounds x="1250" y="180" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1226" y="223" width="84" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="MarkBackorderExpired_di" bpmnElement="MarkBackorderExpired">
+        <dc:Bounds x="750" y="340" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BackorderExpired_di" bpmnElement="BackorderExpired">
+        <dc:Bounds x="1000" y="362" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="978" y="405" width="80" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Start_MarkWaiting_di" bpmnElement="Flow_Start_MarkWaiting">
+        <di:waypoint x="186" y="198" />
+        <di:waypoint x="250" y="198" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_MarkWaiting_WaitRestock_di" bpmnElement="Flow_MarkWaiting_WaitRestock">
+        <di:waypoint x="430" y="198" />
+        <di:waypoint x="500" y="198" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_RestockReceived_ReserveInventory_di" bpmnElement="Flow_RestockReceived_ReserveInventory">
+        <di:waypoint x="670" y="198" />
+        <di:waypoint x="750" y="198" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ReserveInventory_MarkReserved_di" bpmnElement="Flow_ReserveInventory_MarkReserved">
+        <di:waypoint x="920" y="198" />
+        <di:waypoint x="1000" y="198" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_MarkReserved_Completed_di" bpmnElement="Flow_MarkReserved_Completed">
+        <di:waypoint x="1170" y="198" />
+        <di:waypoint x="1250" y="198" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Timeout_MarkExpired_di" bpmnElement="Flow_Timeout_MarkExpired">
+        <di:waypoint x="585" y="256" />
+        <di:waypoint x="585" y="380" />
+        <di:waypoint x="750" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_MarkExpired_Expired_di" bpmnElement="Flow_MarkExpired_Expired">
+        <di:waypoint x="920" y="380" />
+        <di:waypoint x="1000" y="380" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

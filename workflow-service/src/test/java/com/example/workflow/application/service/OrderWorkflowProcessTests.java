@@ -379,7 +379,7 @@ class OrderWorkflowProcessTests {
     }
 
     @Test
-    void rejectsOrderWhenInventoryReportsInsufficientStock() {
+    void rejectsOrderWhenBackorderTimesOut() {
         String businessKey = "order-process-test-insufficient-stock";
         when(inventoryClient.reserveInventory(any(), eq("inventory-reservation:" + businessKey)))
                 .thenThrow(new InsufficientStockException("Inventory service reported insufficient stock"));
@@ -397,20 +397,23 @@ class OrderWorkflowProcessTests {
 
         ProcessInstance processInstance = startOrderProcess(businessKey, "correlation-process-test-insufficient-stock");
 
+        // Now waiting at ReceiveRestockEvent in backorder-fulfillment
+        Job timeoutJob = managementService.createJobQuery()
+                .processDefinitionKey("backorder-fulfillment")
+                .timers()
+                .singleResult();
+        assertThat(timeoutJob).isNotNull();
+        managementService.executeJob(timeoutJob.getId());
+
         HistoricVariableInstance orderStatus = historyService.createHistoricVariableInstanceQuery()
                 .processInstanceId(processInstance.getProcessInstanceId())
                 .variableName(ProcessVariables.ORDER_STATUS)
-                .singleResult();
-        HistoricVariableInstance inventoryStatus = historyService.createHistoricVariableInstanceQuery()
-                .processInstanceId(processInstance.getProcessInstanceId())
-                .variableName(ProcessVariables.INVENTORY_STATUS)
                 .singleResult();
 
         assertThat(runtimeService.createProcessInstanceQuery()
                 .processInstanceId(processInstance.getProcessInstanceId())
                 .singleResult()).isNull();
         assertThat(orderStatus.getValue()).isEqualTo("REJECTED");
-        assertThat(inventoryStatus.getValue()).isEqualTo("INSUFFICIENT_STOCK");
     }
 
     @Test
@@ -512,11 +515,18 @@ class OrderWorkflowProcessTests {
 
         ProcessInstance processInstance = startOrderProcess(businessKey, correlationId);
 
+        // Wait at Backorder timeout for SKU-B
+        Job timeoutJob = managementService.createJobQuery()
+                .processDefinitionKey("backorder-fulfillment")
+                .timers()
+                .singleResult();
+        assertThat(timeoutJob).isNotNull();
+        managementService.executeJob(timeoutJob.getId());
+
         assertThat(runtimeService.createProcessInstanceQuery()
                 .processInstanceId(processInstance.getProcessInstanceId())
                 .singleResult()).isNull();
         assertHistoricVariable(processInstance, ProcessVariables.ORDER_STATUS, "REJECTED");
-        assertHistoricVariable(processInstance, ProcessVariables.INVENTORY_STATUS, "RELEASED");
         assertHistoricVariable(processInstance, ProcessVariables.INVENTORY_RELEASE_STATUS, "RELEASED");
         verify(inventoryClient).releaseInventory(
                 "reservation-" + businessKey + "-a",
